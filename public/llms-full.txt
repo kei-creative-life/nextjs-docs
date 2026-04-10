@@ -1,0 +1,4615 @@
+============================================================
+Source: index.md
+URL: https://nextjs-docs.example.com
+============================================================
+
+
+
+============================================================
+Source: next14/01-routing.md
+URL: https://nextjs-docs.example.com/next14/01-routing
+============================================================
+
+# Next.js 14 App Router - ルーティング
+
+> ソース: https://nextjs.org/docs/14/app/building-your-application/routing
+
+## 基本用語
+
+- **Tree**: 階層構造を可視化する規約（コンポーネントツリー、フォルダ構造等）
+- **Subtree**: ツリーの一部。新しいルート（最初）からリーフ（最後）まで
+- **Root**: ツリーまたはサブツリーの最初のノード（ルートレイアウトなど）
+- **Leaf**: 子を持たないノード（URLパスの最後のセグメント）
+- **URL Segment**: スラッシュで区切られたURLパスの一部
+- **URL Path**: ドメインの後に続くURL部分（セグメントで構成）
+
+## App Router の基本
+
+- `app` ディレクトリ内で動作
+- **デフォルトで Server Components**
+- React Server Components 上に構築
+- 共有レイアウト、ネストされたルーティング、ローディング状態、エラーハンドリングをサポート
+
+## フォルダとファイルの役割
+
+- **フォルダ** = ルートを定義
+- **ファイル** = ルートセグメントに表示されるUIを作成
+
+```
+app/
+├── layout.tsx        # ルートレイアウト（必須）
+├── page.tsx          # `/` のUI
+├── dashboard/
+│   ├── layout.tsx    # dashboardレイアウト
+│   ├── page.tsx      # `/dashboard` のUI
+│   └── settings/
+│       └── page.tsx  # `/dashboard/settings` のUI
+```
+
+## ルートセグメント
+
+各フォルダ = ルートセグメント = URLセグメントに対応
+
+## 特殊ファイル規約
+
+| ファイル | 役割 |
+|---------|------|
+| `layout.js` | セグメントとその子の共有UI |
+| `page.js` | ルート固有のUI（ルートを公開アクセス可能にする） |
+| `loading.js` | セグメントとその子のローディングUI |
+| `not-found.js` | 404 UI |
+| `error.js` | エラーUI |
+| `global-error.js` | グローバルエラーUI |
+| `route.js` | サーバーサイドAPIエンドポイント |
+| `template.js` | 再レンダリングされるレイアウトUI |
+| `default.js` | Parallel Routesのフォールバック |
+
+> `.js`, `.jsx`, `.tsx` いずれも使用可能
+
+## コンポーネント階層（レンダリング順序）
+
+```
+<Layout>
+  <Template>
+    <ErrorBoundary fallback={<Error />}>
+      <Suspense fallback={<Loading />}>
+        <ErrorBoundary fallback={<NotFound />}>
+          <Page />
+        </ErrorBoundary>
+      </Suspense>
+    </ErrorBoundary>
+  </Template>
+</Layout>
+```
+
+ネストされたルートでは、親セグメントのコンポーネントの**内側**に子セグメントのコンポーネントがネストされる。
+
+## コロケーション
+
+`app` ディレクトリ内にコンポーネント、スタイル、テストなどを配置可能。
+**`page.js` または `route.js` の内容のみが公開アクセス可能**。
+
+---
+
+## ルートの定義
+
+> ソース: https://nextjs.org/docs/14/app/building-your-application/routing/defining-routes
+
+- フォルダでルートを定義
+- `page.js` ファイルでルートセグメントを公開
+
+```tsx
+// app/page.tsx → `/`
+export default function Page() {
+  return <h1>Hello, Next.js!</h1>
+}
+```
+
+`page.js` がないフォルダはルートとして公開されない（コンポーネントやスタイルの配置に使える）。
+
+---
+
+## Pages と Layouts
+
+> ソース: https://nextjs.org/docs/14/app/building-your-application/routing/pages-and-layouts
+
+### Pages
+
+- ルート固有の**ユニークなUI**
+- `page.js` からコンポーネントをエクスポート
+- デフォルトで Server Component
+- ルートサブツリーの**リーフ**
+
+```tsx
+// app/dashboard/page.tsx → `/dashboard`
+export default function Page() {
+  return <h1>Hello, Dashboard Page!</h1>
+}
+```
+
+### Layouts
+
+- 複数ページ間で**共有されるUI**
+- ナビゲーション時に状態を保持、再レンダリングしない
+- `children` プロップを受け取る
+
+```tsx
+// app/dashboard/layout.tsx
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <section>
+      <nav></nav>
+      {children}
+    </section>
+  )
+}
+```
+
+**重要な注意点:**
+- 親レイアウトと子の間でデータの受け渡しは不可（同じデータを複数箇所でfetchしてOK、Reactが自動重複排除）
+- レイアウトは下位のルートセグメントにアクセスできない（`useSelectedLayoutSegment` / `useSelectedLayoutSegments` を使う）
+
+### Root Layout（必須）
+
+```tsx
+// app/layout.tsx
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <html lang="en">
+      <body>{children}</body>
+    </html>
+  )
+}
+```
+
+- `app` ディレクトリに**必須**
+- `<html>` と `<body>` タグを定義する必要がある
+- Server Component であり、Client Component に**できない**
+
+### ネストされたレイアウト
+
+- フォルダ内のレイアウトはそのルートセグメントに適用
+- デフォルトでネスト（`children` プロップで子レイアウトをラップ）
+- Root Layout のみ `<html>` と `<body>` を含める
+
+### Templates
+
+- レイアウトと似ているが、ナビゲーション時に**新しいインスタンスを作成**
+- DOMが再作成、状態は保持されない、effectsが再同期
+- ユースケース: `useEffect` でのページビュー記録、ページごとのフィードバックフォーム
+
+```tsx
+// app/template.tsx
+export default function Template({ children }: { children: React.ReactNode }) {
+  return <div>{children}</div>
+}
+```
+
+レンダリング順序:
+```jsx
+<Layout>
+  <Template key={routeParam}>{children}</Template>
+</Layout>
+```
+
+### Metadata の設定
+
+```tsx
+import { Metadata } from 'next'
+
+export const metadata: Metadata = {
+  title: 'Next.js',
+}
+
+export default function Page() {
+  return '...'
+}
+```
+
+> Root Layout に手動で `<title>` や `<meta>` を追加しない。Metadata API を使用する。
+
+---
+
+## Dynamic Routes
+
+> ソース: https://nextjs.org/docs/14/app/building-your-application/routing/dynamic-routes
+
+### 基本
+
+フォルダ名を角括弧で囲む: `[folderName]`
+
+```tsx
+// app/blog/[slug]/page.tsx
+export default function Page({ params }: { params: { slug: string } }) {
+  return <div>My Post: {params.slug}</div>
+}
+```
+
+| ルート | URL例 | `params` |
+|-------|-------|----------|
+| `app/blog/[slug]/page.js` | `/blog/a` | `{ slug: 'a' }` |
+
+### generateStaticParams
+
+ビルド時にルートを静的に生成:
+
+```tsx
+export async function generateStaticParams() {
+  const posts = await fetch('https://.../posts').then((res) => res.json())
+  return posts.map((post) => ({ slug: post.slug }))
+}
+```
+
+### Catch-all Segments
+
+| パターン | 例 | マッチ |
+|---------|---|--------|
+| `[slug]` | `/blog/a` | 単一セグメント |
+| `[...slug]` | `/shop/a/b/c` | 1つ以上のセグメント（`{ slug: ['a','b','c'] }`） |
+| `[[...slug]]` | `/shop` も `/shop/a/b` も | 0個以上のセグメント |
+
+### TypeScript
+
+```tsx
+// app/blog/[slug]/page.tsx       → { slug: string }
+// app/shop/[...slug]/page.tsx    → { slug: string[] }
+// app/shop/[[...slug]]/page.tsx  → { slug?: string[] }
+// app/[catId]/[itemId]/page.tsx  → { categoryId: string, itemId: string }
+```
+
+---
+
+## Route Groups
+
+> ソース: https://nextjs.org/docs/14/app/building-your-application/routing/route-groups
+
+フォルダ名を丸括弧で囲む: `(folderName)` → **URLパスに影響しない**
+
+### 用途
+
+1. **ルートの整理**: サイトセクション、チームごとにグループ化
+2. **同じセグメントレベルでネストされたレイアウト**
+3. **複数のRoot Layoutの作成**
+
+```
+app/
+├── (marketing)/
+│   ├── layout.tsx      # マーケティング用レイアウト
+│   ├── about/page.tsx  # /about
+│   └── blog/page.tsx   # /blog
+├── (shop)/
+│   ├── layout.tsx      # ショップ用レイアウト
+│   ├── cart/page.tsx   # /cart
+│   └── account/page.tsx # /account
+```
+
+**注意:**
+- `(marketing)/about/page.js` と `(shop)/about/page.js` は同じ `/about` になりエラー
+- 複数Root Layoutを使う場合、`home page.js` はいずれかのRoute Groupに定義
+- 複数Root Layout間のナビゲーションは**フルページロード**
+
+---
+
+## リンクとナビゲーション
+
+> ソース: https://nextjs.org/docs/14/app/building-your-application/routing/linking-and-navigating
+
+### 3つのナビゲーション方法
+
+#### 1. `<Link>` コンポーネント（推奨）
+
+```tsx
+import Link from 'next/link'
+
+export default function Page() {
+  return <Link href="/dashboard">Dashboard</Link>
+}
+```
+
+- `<a>` タグを拡張
+- プリフェッチとクライアントサイドナビゲーションを提供
+- Dynamic Segmentsへのリンク: テンプレートリテラルを使用
+- アクティブリンクの検出: `usePathname()` を使用
+- スクロール制御: `scroll={false}` で無効化
+
+#### 2. `useRouter` Hook
+
+```tsx
+'use client'
+import { useRouter } from 'next/navigation'
+
+export default function Page() {
+  const router = useRouter()
+  return (
+    <button onClick={() => router.push('/dashboard')}>
+      Dashboard
+    </button>
+  )
+}
+```
+
+- Client Components でのみ使用
+- Server Components では `redirect()` を使用
+
+#### 3. ネイティブ History API
+
+- `window.history.pushState`: 新しいエントリを追加（戻る操作可能）
+- `window.history.replaceState`: 現在のエントリを置換（戻る操作不可）
+
+### ナビゲーションの仕組み
+
+1. **コード分割**: ルートセグメントごとに自動分割
+2. **プリフェッチ**: `<Link>` がビューポートに表示されると自動プリフェッチ
+   - 静的ルート: 全体をプリフェッチ・キャッシュ
+   - 動的ルート: 最初の `loading.js` までの共有レイアウトをプリフェッチ（30秒キャッシュ）
+3. **キャッシング**: Router Cache（インメモリクライアントサイドキャッシュ）
+4. **部分レンダリング**: 変更されたセグメントのみ再レンダリング
+5. **ソフトナビゲーション**: ページリロードなし、React状態を保持
+6. **戻る/進むナビゲーション**: スクロール位置を維持、Router Cacheを再利用
+
+
+============================================================
+Source: next14/02-rendering.md
+URL: https://nextjs-docs.example.com/next14/02-rendering
+============================================================
+
+# Next.js 14 App Router - レンダリング（Server/Client Components）
+
+> ソース: https://nextjs.org/docs/14/app/building-your-application/rendering
+
+## Server Components vs Client Components 使い分け
+
+| やりたいこと | Server | Client |
+|------------|--------|--------|
+| データフェッチ | o | |
+| バックエンドリソースに直接アクセス | o | |
+| 機密情報をサーバーに保持（トークン、APIキー） | o | |
+| 大きな依存関係をサーバーに保持 / クライアントJS削減 | o | |
+| インタラクティブ性、イベントリスナー（onClick, onChange等） | | o |
+| State、Lifecycle Effects（useState, useEffect等） | | o |
+| ブラウザ専用API | | o |
+| state/effects/ブラウザAPIに依存するカスタムフック | | o |
+| React クラスコンポーネント | | o |
+
+---
+
+## Server Components
+
+> ソース: https://nextjs.org/docs/14/app/building-your-application/rendering/server-components
+
+### 利点
+
+- **データフェッチ**: サーバー側でデータソースに近い場所でフェッチ → 高速化
+- **セキュリティ**: トークンやAPIキーをクライアントに露出しない
+- **キャッシング**: レンダリング結果をキャッシュ、リクエスト・ユーザー間で再利用
+- **バンドルサイズ**: 大きな依存関係をサーバーに保持
+- **初期ページロード / FCP**: サーバーでHTML生成、即座に表示
+- **SEO**: レンダリング済みHTMLを検索エンジンがインデックス
+- **ストリーミング**: レンダリングをチャンクに分割してクライアントに順次送信
+
+### デフォルトでServer Components
+
+Next.js は**デフォルトで Server Components** を使用。追加設定不要。
+
+### レンダリングプロセス
+
+**サーバー側:**
+1. React が Server Components を **RSC Payload**（React Server Component Payload）にレンダリング
+2. Next.js が RSC Payload と Client Component JS を使って **HTML** をレンダリング
+
+**クライアント側:**
+1. HTML で非インタラクティブなプレビューを即座に表示
+2. RSC Payload で Client/Server Component ツリーを照合、DOM を更新
+3. JS でClient Components を**ハイドレーション**（インタラクティブ化）
+
+### RSC Payload の中身
+- Server Components のレンダリング結果
+- Client Components のレンダリング位置のプレースホルダーとJSファイルへの参照
+- Server Component → Client Component に渡されたprops
+
+---
+
+## サーバーレンダリング戦略
+
+### 1. Static Rendering（デフォルト）
+
+- **ビルド時**にレンダリング（またはデータ再検証後にバックグラウンドで）
+- 結果がキャッシュされCDNに配信可能
+- ユーザーに個人化されないデータに適する（ブログ記事、商品ページ等）
+
+### 2. Dynamic Rendering
+
+- **リクエスト時**に各ユーザーごとにレンダリング
+- 個人化されたデータや、リクエスト時のみ判明する情報に適する
+
+**動的レンダリングへの切り替え条件:**
+
+| Dynamic Functions | データ | ルート |
+|-------------------|--------|--------|
+| なし | キャッシュ済み | 静的レンダリング |
+| あり | キャッシュ済み | 動的レンダリング |
+| なし | 未キャッシュ | 動的レンダリング |
+| あり | 未キャッシュ | 動的レンダリング |
+
+**Dynamic Functions:**
+- `cookies()` / `headers()` → ルート全体を動的レンダリングに
+- `searchParams` prop（Pageコンポーネント）→ ページを動的レンダリングに
+
+### 3. Streaming
+
+- サーバーからUIをチャンク単位で順次レンダリング
+- `loading.js` と React `<Suspense>` で実現
+- TTFB、FCP を改善
+
+---
+
+## Client Components
+
+> ソース: https://nextjs.org/docs/14/app/building-your-application/rendering/client-components
+
+### 使い方
+
+ファイルの先頭に `"use client"` ディレクティブを追加:
+
+```tsx
+'use client'
+
+import { useState } from 'react'
+
+export default function Counter() {
+  const [count, setCount] = useState(0)
+  return (
+    <div>
+      <p>You clicked {count} times</p>
+      <button onClick={() => setCount(count + 1)}>Click me</button>
+    </div>
+  )
+}
+```
+
+### `"use client"` の境界
+
+- `"use client"` を定義したファイルにインポートされた全てのモジュール（子コンポーネント含む）がクライアントバンドルの一部になる
+- 全てのコンポーネントに定義する必要はない。境界を定義すれば、その配下は全てクライアント
+
+### レンダリングプロセス
+
+**初回ページロード:**
+1. サーバーで Client/Server Components 両方の静的HTMLプレビューをレンダリング
+2. クライアントでHTMLを即座に表示（非インタラクティブ）
+3. RSC Payload でツリーを照合、DOM更新
+4. ハイドレーションでインタラクティブ化
+
+**後続ナビゲーション:**
+- クライアントのみでレンダリング（サーバーレンダリングHTMLなし）
+
+### サーバー環境に戻る
+
+`"use client"` 境界の後でも、Server Components と Server Actions のインターリービングでサーバーコードを維持可能。
+
+---
+
+## 構成パターン
+
+> ソース: https://nextjs.org/docs/14/app/building-your-application/rendering/composition-patterns
+
+### Client Components をツリーの下部に移動
+
+```tsx
+// Layout は Server Component のまま
+import SearchBar from './searchbar'  // Client Component
+import Logo from './logo'            // Server Component
+
+export default function Layout({ children }: { children: React.ReactNode }) {
+  return (
+    <>
+      <nav>
+        <Logo />
+        <SearchBar />
+      </nav>
+      <main>{children}</main>
+    </>
+  )
+}
+```
+
+### Server→Client にデータを渡す
+
+Props は**シリアライズ可能**である必要がある。
+
+### サードパーティパッケージの扱い
+
+`"use client"` ディレクティブがないサードパーティコンポーネントは Server Component 内で直接使えない。
+ラッパーを作成:
+
+```tsx
+// app/carousel.tsx
+'use client'
+import { Carousel } from 'acme-carousel'
+export default Carousel
+```
+
+### Context Providers
+
+Server Components では `createContext` は使えない。Client Component でラップ:
+
+```tsx
+// app/theme-provider.tsx
+'use client'
+import { createContext } from 'react'
+
+export const ThemeContext = createContext({})
+
+export default function ThemeProvider({ children }: { children: React.ReactNode }) {
+  return <ThemeContext.Provider value="dark">{children}</ThemeContext.Provider>
+}
+```
+
+```tsx
+// app/layout.tsx
+import ThemeProvider from './theme-provider'
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html>
+      <body>
+        <ThemeProvider>{children}</ThemeProvider>
+      </body>
+    </html>
+  )
+}
+```
+
+> Provider はできるだけツリーの深い位置にレンダリングする。
+
+### Server→Client コンポーネントのインターリービング
+
+**NG: Client Component 内で Server Component をインポート**
+```tsx
+'use client'
+import ServerComponent from './Server-Component'  // NG!
+```
+
+**OK: Server Component を Client Component の children/props として渡す**
+```tsx
+// app/page.tsx (Server Component)
+import ClientComponent from './client-component'
+import ServerComponent from './server-component'
+
+export default function Page() {
+  return (
+    <ClientComponent>
+      <ServerComponent />
+    </ClientComponent>
+  )
+}
+```
+
+### server-only パッケージ
+
+サーバー専用コードの誤ったクライアント使用を防ぐ:
+
+```bash
+npm install server-only
+```
+
+```ts
+import 'server-only'
+
+export async function getData() {
+  const res = await fetch('https://external-service.com/data', {
+    headers: { authorization: process.env.API_KEY },
+  })
+  return res.json()
+}
+```
+
+
+============================================================
+Source: next14/03-data-fetching.md
+URL: https://nextjs-docs.example.com/next14/03-data-fetching
+============================================================
+
+# Next.js 14 App Router - データフェッチング
+
+> ソース: https://nextjs.org/docs/14/app/building-your-application/data-fetching/fetching-caching-and-revalidating
+
+## データフェッチの4つの方法
+
+1. サーバーで `fetch` を使用
+2. サーバーでサードパーティライブラリを使用
+3. クライアントで Route Handler 経由
+4. クライアントでサードパーティライブラリ（SWR, TanStack Query等）
+
+---
+
+## サーバーでの fetch
+
+Next.js はネイティブ `fetch` を拡張し、キャッシングと再検証の挙動を設定可能。
+React は `fetch` を自動メモ化。
+
+```tsx
+// app/page.tsx
+async function getData() {
+  const res = await fetch('https://api.example.com/...')
+
+  if (!res.ok) {
+    throw new Error('Failed to fetch data')  // 最も近い error.js を起動
+  }
+
+  return res.json()
+}
+
+export default async function Page() {
+  const data = await getData()
+  return <main>{/* ... */}</main>
+}
+```
+
+**注意:**
+- Route Handlers 内の `fetch` はメモ化されない（React コンポーネントツリーの一部ではないため）
+- TypeScript で `async`/`await` を使うには TypeScript 5.1.3+ と `@types/react` 18.2.8+ が必要
+
+---
+
+## キャッシング
+
+### デフォルトでキャッシュ
+
+```js
+// 'force-cache' がデフォルト（省略可能）
+fetch('https://...', { cache: 'force-cache' })
+```
+
+POST メソッドも自動キャッシュ（Route Handler 内のPOSTを除く）。
+
+### キャッシュからオプトアウト
+
+`fetch` がキャッシュ**されない**条件:
+- `cache: 'no-store'` を指定
+- `revalidate: 0` を指定
+- Route Handler 内の POST メソッド
+- `headers` や `cookies` の使用後
+- `const dynamic = 'force-dynamic'` セグメント設定
+- `fetchCache` セグメント設定でスキップ
+- `Authorization` or `Cookie` ヘッダー使用（上位に未キャッシュリクエストがある場合）
+
+```js
+fetch('https://...', { cache: 'no-store' })
+```
+
+---
+
+## 再検証（Revalidation）
+
+### 時間ベースの再検証
+
+```js
+fetch('https://...', { next: { revalidate: 3600 } })  // 最大1時間ごと
+```
+
+または Route Segment Config:
+```tsx
+export const revalidate = 3600  // 最大1時間ごと
+```
+
+### オンデマンド再検証
+
+#### パスベース: `revalidatePath`
+```ts
+'use server'
+import { revalidatePath } from 'next/cache'
+
+export async function action() {
+  revalidatePath('/posts')
+}
+```
+
+#### タグベース: `revalidateTag`
+```tsx
+// フェッチ時にタグ付け
+const res = await fetch('https://...', { next: { tags: ['collection'] } })
+
+// Server Action でタグを再検証
+'use server'
+import { revalidateTag } from 'next/cache'
+
+export async function action() {
+  revalidateTag('collection')
+}
+```
+
+**エラー時の挙動:** エラーが発生した場合、最後に成功したデータがキャッシュから提供され続ける。
+
+---
+
+## サードパーティライブラリでのフェッチ（サーバー）
+
+`fetch` を使わないDB・CMS・ORMクライアントの場合:
+
+```ts
+import { cache } from 'react'
+
+export const getItem = cache(async (id: string) => {
+  const item = await db.item.findUnique({ id })
+  return item
+})
+```
+
+```tsx
+// app/item/[id]/layout.tsx
+import { getItem } from '@/utils/get-item'
+
+export const revalidate = 3600
+
+export default async function Layout({ params: { id } }: { params: { id: string } }) {
+  const item = await getItem(id)
+  // ...
+}
+```
+
+React `cache` でメモ化 + `revalidate` セグメント設定でキャッシュ制御。
+`getItem` が複数箇所で呼ばれても、DBクエリは1回のみ。
+
+---
+
+## クライアントでのフェッチ
+
+### Route Handler 経由
+
+Client Component から Route Handler を呼び出してデータ取得。
+APIトークンなどの機密情報をクライアントに露出しない。
+
+> Server Components ではRoute Handlerを呼ぶ必要はない。直接フェッチ可能。
+
+### サードパーティライブラリ
+
+- **SWR**: https://swr.vercel.app/
+- **TanStack Query**: https://tanstack.com/query/latest
+
+独自のメモ化、キャッシング、再検証、ミューテーションAPIを提供。
+
+---
+
+## データフェッチパターン
+
+### どこで使うかに応じてフェッチ
+
+同じデータが必要な複数コンポーネントでそれぞれ `fetch` してOK。
+React が自動的にリクエストをメモ化・重複排除。
+
+### 並列データフェッチ
+
+`Promise.all` でウォーターフォールを回避:
+
+```tsx
+async function Page() {
+  const artistData = getArtist(id)
+  const albumsData = getAlbums(id)
+
+  const [artist, albums] = await Promise.all([artistData, albumsData])
+  // ...
+}
+```
+
+
+============================================================
+Source: next14/04-server-actions.md
+URL: https://nextjs-docs.example.com/next14/04-server-actions
+============================================================
+
+# Next.js 14 App Router - Server Actions & Mutations
+
+> ソース: https://nextjs.org/docs/14/app/building-your-application/data-fetching/server-actions-and-mutations
+
+## 概要
+
+Server Actions = サーバーで実行される**非同期関数**。
+フォーム送信とデータミューテーションを処理。
+
+## 定義方法
+
+### Server Component 内（インライン）
+
+```tsx
+export default function Page() {
+  async function create() {
+    'use server'
+    // サーバーで実行される
+  }
+
+  return <form action={create}>...</form>
+}
+```
+
+### 別ファイル（Client Component から使用する場合）
+
+```ts
+// app/actions.ts
+'use server'
+
+export async function create() {
+  // ...
+}
+```
+
+```tsx
+// app/ui/button.tsx
+import { create } from '@/app/actions'
+
+export function Button() {
+  return <form action={create}>...</form>
+}
+```
+
+### Props として渡す
+
+```tsx
+<ClientComponent updateItem={updateItem} />
+
+// client-component.tsx
+'use client'
+export default function ClientComponent({ updateItem }) {
+  return <form action={updateItem}>{/* ... */}</form>
+}
+```
+
+## 動作特性
+
+- `<form>` の `action` 属性で呼び出し可能
+- Server Components ではプログレッシブエンハンスメント（JS無しでもフォーム送信可能）
+- Client Components ではJSロード前のサブミッションをキュー
+- `POST` メソッドのみで呼び出される
+- 引数と返り値はシリアライズ可能である必要がある
+- `<form>` 以外からも呼び出し可能（イベントハンドラ、`useEffect` 等）
+
+---
+
+## フォーム操作
+
+### 基本的なフォーム
+
+```tsx
+export default function Page() {
+  async function createInvoice(formData: FormData) {
+    'use server'
+    const rawFormData = {
+      customerId: formData.get('customerId'),
+      amount: formData.get('amount'),
+      status: formData.get('status'),
+    }
+    // データミューテーション & キャッシュ再検証
+  }
+
+  return <form action={createInvoice}>...</form>
+}
+```
+
+### 追加引数を渡す（bind）
+
+```tsx
+'use client'
+import { updateUser } from './actions'
+
+export function UserProfile({ userId }: { userId: string }) {
+  const updateUserWithId = updateUser.bind(null, userId)
+  return (
+    <form action={updateUserWithId}>
+      <input type="text" name="name" />
+      <button type="submit">Update User Name</button>
+    </form>
+  )
+}
+```
+
+```ts
+// app/actions.ts
+'use server'
+export async function updateUser(userId: string, formData: FormData) {
+  // ...
+}
+```
+
+### Pending State（useFormStatus）
+
+```tsx
+'use client'
+import { useFormStatus } from 'react-dom'
+
+export function SubmitButton() {
+  const { pending } = useFormStatus()
+  return (
+    <button type="submit" aria-disabled={pending}>
+      Add
+    </button>
+  )
+}
+```
+
+> `useFormStatus` は `<form>` の子として定義する必要がある。
+
+### サーバーサイドバリデーション（useFormState）
+
+```ts
+// app/actions.ts
+'use server'
+import { z } from 'zod'
+
+const schema = z.object({
+  email: z.string({ invalid_type_error: 'Invalid Email' }),
+})
+
+export async function createUser(prevState: any, formData: FormData) {
+  const validatedFields = schema.safeParse({
+    email: formData.get('email'),
+  })
+
+  if (!validatedFields.success) {
+    return { errors: validatedFields.error.flatten().fieldErrors }
+  }
+
+  // データミューテーション
+  return { message: 'Success' }
+}
+```
+
+```tsx
+'use client'
+import { useFormState } from 'react-dom'
+import { createUser } from '@/app/actions'
+
+const initialState = { message: '' }
+
+export function Signup() {
+  const [state, formAction] = useFormState(createUser, initialState)
+
+  return (
+    <form action={formAction}>
+      <label htmlFor="email">Email</label>
+      <input type="text" id="email" name="email" required />
+      <p aria-live="polite">{state?.message}</p>
+      <button>Sign up</button>
+    </form>
+  )
+}
+```
+
+### Optimistic Updates（useOptimistic）
+
+```tsx
+'use client'
+import { useOptimistic } from 'react'
+import { send } from './actions'
+
+export function Thread({ messages }: { messages: Message[] }) {
+  const [optimisticMessages, addOptimisticMessage] = useOptimistic(
+    messages,
+    (state, newMessage: string) => [...state, { message: newMessage }]
+  )
+
+  return (
+    <div>
+      {optimisticMessages.map((m, k) => <div key={k}>{m.message}</div>)}
+      <form action={async (formData) => {
+        const message = formData.get('message')
+        addOptimisticMessage(message)
+        await send(message)
+      }}>
+        <input type="text" name="message" />
+        <button type="submit">Send</button>
+      </form>
+    </div>
+  )
+}
+```
+
+---
+
+## フォーム以外からの呼び出し
+
+### イベントハンドラ
+
+```tsx
+'use client'
+import { incrementLike } from './actions'
+
+export default function LikeButton({ initialLikes }: { initialLikes: number }) {
+  const [likes, setLikes] = useState(initialLikes)
+
+  return (
+    <button onClick={async () => {
+      const updatedLikes = await incrementLike()
+      setLikes(updatedLikes)
+    }}>
+      Like ({likes})
+    </button>
+  )
+}
+```
+
+### useEffect
+
+```tsx
+'use client'
+import { incrementViews } from './actions'
+
+export default function ViewCount({ initialViews }: { initialViews: number }) {
+  const [views, setViews] = useState(initialViews)
+
+  useEffect(() => {
+    const updateViews = async () => {
+      const updatedViews = await incrementViews()
+      setViews(updatedViews)
+    }
+    updateViews()
+  }, [])
+
+  return <p>Total Views: {views}</p>
+}
+```
+
+---
+
+## データ再検証
+
+```ts
+'use server'
+import { revalidatePath } from 'next/cache'
+
+export async function createPost() {
+  // ...
+  revalidatePath('/posts')
+}
+```
+
+```ts
+'use server'
+import { revalidateTag } from 'next/cache'
+
+export async function createPost() {
+  // ...
+  revalidateTag('posts')
+}
+```
+
+## リダイレクト
+
+`redirect` は `try/catch` ブロックの**外**で呼ぶ:
+
+```ts
+'use server'
+import { redirect } from 'next/navigation'
+import { revalidateTag } from 'next/cache'
+
+export async function createPost(id: string) {
+  try {
+    // ...
+  } catch (error) {
+    // ...
+  }
+
+  revalidateTag('posts')
+  redirect(`/post/${id}`)
+}
+```
+
+## Cookies 操作
+
+```ts
+'use server'
+import { cookies } from 'next/headers'
+
+export async function exampleAction() {
+  const value = cookies().get('name')?.value  // 取得
+  cookies().set('name', 'Delba')              // 設定
+  cookies().delete('name')                    // 削除
+}
+```
+
+---
+
+## セキュリティ
+
+### 認証・認可
+
+Server Actions は公開APIエンドポイントと同様に扱い、ユーザー認可を確認:
+
+```ts
+'use server'
+import { auth } from './lib'
+
+export function addItem() {
+  const { user } = auth()
+  if (!user) {
+    throw new Error('You must be signed in to perform this action')
+  }
+  // ...
+}
+```
+
+### クロージャと暗号化
+
+- Server Action 内でキャプチャされた変数はクライアントに送信され、サーバーに戻される
+- Next.js が閉じ込められた変数を**自動暗号化**
+- ビルドごとに新しい秘密鍵が生成
+- 複数サーバーでの自己ホスティング時: `process.env.NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` で暗号化キーを統一
+
+### CSRF 対策
+
+- POST メソッドのみ許可
+- Origin ヘッダーと Host ヘッダーを比較
+- `serverActions.allowedOrigins` で許可オリジンを設定可能
+
+```js
+// next.config.js
+module.exports = {
+  experimental: {
+    serverActions: {
+      allowedOrigins: ['my-proxy.com', '*.my-proxy.com'],
+    },
+  },
+}
+```
+
+
+============================================================
+Source: next14/05-caching.md
+URL: https://nextjs-docs.example.com/next14/05-caching
+============================================================
+
+# Next.js 14 App Router - キャッシング
+
+> ソース: https://nextjs.org/docs/14/app/building-your-application/caching
+
+## 4つのキャッシュメカニズム
+
+| メカニズム | 対象 | 場所 | 目的 | 期間 |
+|-----------|------|------|------|------|
+| Request Memoization | 関数の戻り値 | サーバー | Reactコンポーネントツリー内でデータ再利用 | リクエストライフサイクル |
+| Data Cache | データ | サーバー | ユーザーリクエスト・デプロイを跨いでデータ保存 | 永続的（再検証可能） |
+| Full Route Cache | HTML と RSC Payload | サーバー | レンダリングコスト削減 | 永続的（再検証可能） |
+| Router Cache | RSC Payload | クライアント | ナビゲーション時のサーバーリクエスト削減 | セッション or 時間ベース |
+
+> デフォルトで Next.js は可能な限りキャッシュする。
+
+---
+
+## 1. Request Memoization（React の機能）
+
+- React が `fetch` を自動メモ化
+- 同じURL・オプションの `fetch` はレンダリングパス内で1回だけ実行
+- **GET メソッドのみ**
+- React コンポーネントツリー内のみ（Route Handlers は対象外）
+
+```tsx
+async function getItem() {
+  const res = await fetch('https://.../item/1')
+  return res.json()
+}
+
+const item = await getItem() // cache MISS（実行される）
+const item = await getItem() // cache HIT（メモから返す）
+```
+
+**期間:** レンダリングパスが完了するまで（サーバーリクエスト単位）
+
+**オプトアウト:** `AbortController` の `signal` を渡す
+```js
+const { signal } = new AbortController()
+fetch(url, { signal })
+```
+
+---
+
+## 2. Data Cache
+
+- `fetch` の結果をリクエスト・デプロイを跨いで**永続的に保存**
+- デフォルトでキャッシュ（`cache: 'force-cache'`）
+
+### 再検証
+
+#### 時間ベース
+```js
+fetch('https://...', { next: { revalidate: 3600 } })  // 1時間
+```
+
+**Stale-While-Revalidate 方式:**
+1. 期間内のリクエスト → キャッシュデータを返す
+2. 期間後の最初のリクエスト → キャッシュ（stale）を返す + バックグラウンドで再検証
+3. 再検証成功 → キャッシュ更新 / 失敗 → 前のデータを維持
+
+#### オンデマンド
+```js
+revalidatePath('/')           // パスベース
+revalidateTag('collection')   // タグベース
+```
+
+- オンデマンド再検証はキャッシュエントリを**即座に削除**
+- 次のリクエストで新しいデータをフェッチ
+
+### オプトアウト
+
+```js
+fetch('https://...', { cache: 'no-store' })
+
+// またはセグメント全体
+export const dynamic = 'force-dynamic'
+```
+
+---
+
+## 3. Full Route Cache
+
+- ビルド時に静的レンダリングされたルートのHTML + RSC Payloadをキャッシュ
+- CDNから配信可能
+
+### 無効化
+
+1. **Data Cache の再検証** → Full Route Cache も無効化
+2. **再デプロイ** → Full Route Cache はクリア（Data Cache は永続）
+
+### オプトアウト
+
+- Dynamic Functions の使用（`cookies()`, `headers()`, `searchParams`）
+- `dynamic = 'force-dynamic'` または `revalidate = 0`
+- Data Cache のオプトアウト（`cache: 'no-store'` のfetchがあるルート）
+
+---
+
+## 4. Router Cache（クライアントサイド）
+
+- ブラウザのインメモリキャッシュ
+- 訪問済みルートとプリフェッチされたルートのRSC Payloadを保存
+
+### 期間
+
+- **セッション**: ナビゲーション間で持続、ページリフレッシュでクリア
+- **自動無効化期間**:
+  - 動的レンダリングのルート: **30秒**
+  - 静的レンダリングのルート: **5分**
+
+### 無効化
+
+- Server Action で `revalidatePath` / `revalidateTag`
+- `cookies.set` / `cookies.delete` → 認証変更などに対応
+- `router.refresh` → Router Cache をクリアし、サーバーに新しいリクエスト
+
+### オプトアウト
+
+Router Cache 自体のオプトアウトは**不可能**。
+`<Link prefetch={false}>` でプリフェッチは無効化できるが、30秒間はキャッシュされる。
+
+---
+
+## キャッシュの相互作用
+
+### Data Cache ↔ Full Route Cache
+- Data Cache の再検証/オプトアウト → Full Route Cache も無効化
+- Full Route Cache のオプトアウト → Data Cache には**影響しない**
+
+### Data Cache ↔ Router Cache
+- Route Handler での Data Cache 再検証 → Router Cache は**即座に無効化されない**
+- Server Action での再検証 → Router Cache も無効化
+
+---
+
+## API とキャッシュの関係
+
+| API | Router Cache | Full Route Cache | Data Cache | React Cache |
+|-----|-------------|-----------------|------------|-------------|
+| `<Link prefetch>` | キャッシュ | | | |
+| `router.prefetch` | キャッシュ | | | |
+| `router.refresh` | 再検証 | | | |
+| `fetch` | | | キャッシュ | キャッシュ |
+| `fetch cache:'no-store'` | | | オプトアウト | |
+| `fetch next.revalidate` | | 再検証 | 再検証 | |
+| `fetch next.tags` | | キャッシュ | キャッシュ | |
+| `revalidateTag` | 再検証(SA) | 再検証 | 再検証 | |
+| `revalidatePath` | 再検証(SA) | 再検証 | 再検証 | |
+| `const revalidate` | | 再検証/out | 再検証/out | |
+| `const dynamic` | | キャッシュ/out | キャッシュ/out | |
+| `cookies` | 再検証(SA) | オプトアウト | | |
+| `headers`, `searchParams` | | オプトアウト | | |
+| `generateStaticParams` | | キャッシュ | | |
+| `React.cache` | | | | キャッシュ |
+
+> SA = Server Action 経由の場合
+
+---
+
+## `revalidatePath` vs `router.refresh`
+
+| | `revalidatePath` | `router.refresh` |
+|--|-------------------|-------------------|
+| Router Cache | クリア | クリア |
+| Data Cache | パージ | **変更なし** |
+| Full Route Cache | パージ | **変更なし** |
+| 用途 | サーバーサイドからのデータ・ルート更新 | クライアントからのUI更新 |
+
+
+============================================================
+Source: next14/06-route-handlers.md
+URL: https://nextjs-docs.example.com/next14/06-route-handlers
+============================================================
+
+# Next.js 14 App Router - Route Handlers
+
+> ソース: https://nextjs.org/docs/14/app/building-your-application/routing/route-handlers
+
+## 概要
+
+Web の Request/Response API を使ってカスタムリクエストハンドラを作成。
+`app` ディレクトリ内でのみ利用可能（`pages` の API Routes に相当）。
+
+## 規約
+
+`route.js|ts` ファイルで定義:
+
+```ts
+// app/api/route.ts
+export async function GET(request: Request) {}
+```
+
+**制約:** 同じルートセグメントに `route.js` と `page.js` を共存させることは**不可**。
+
+## サポートされるHTTPメソッド
+
+`GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`
+
+未サポートメソッド → `405 Method Not Allowed`
+
+## NextRequest / NextResponse
+
+ネイティブの Request/Response を拡張した便利なヘルパー。
+
+---
+
+## キャッシング
+
+### デフォルトでキャッシュされる条件
+
+`GET` メソッド + `Response` オブジェクト使用時:
+
+```ts
+export async function GET() {
+  const res = await fetch('https://data.mongodb-api.com/...')
+  const data = await res.json()
+  return Response.json({ data })
+}
+```
+
+### キャッシュのオプトアウト
+
+- `Request` オブジェクトを `GET` で使用
+- 他のHTTPメソッド（POST等）を使用
+- Dynamic Functions（`cookies`, `headers`）を使用
+- Segment Config で dynamic モードを指定
+
+```ts
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url)
+  const id = searchParams.get('id')
+  // Request オブジェクトを使用 → キャッシュされない
+  const res = await fetch(`https://data.mongodb-api.com/product/${id}`)
+  const product = await res.json()
+  return Response.json({ product })
+}
+```
+
+---
+
+## 再検証
+
+```ts
+export async function GET() {
+  const res = await fetch('https://data.mongodb-api.com/...', {
+    next: { revalidate: 60 },  // 60秒ごと
+  })
+  const data = await res.json()
+  return Response.json(data)
+}
+```
+
+またはセグメント設定:
+```ts
+export const revalidate = 60
+```
+
+---
+
+## Cookies
+
+```ts
+import { cookies } from 'next/headers'
+
+export async function GET(request: Request) {
+  const cookieStore = cookies()
+  const token = cookieStore.get('token')
+
+  return new Response('Hello', {
+    status: 200,
+    headers: { 'Set-Cookie': `token=${token.value}` },
+  })
+}
+```
+
+NextRequest 経由でも:
+```ts
+import { type NextRequest } from 'next/server'
+
+export async function GET(request: NextRequest) {
+  const token = request.cookies.get('token')
+}
+```
+
+## Headers
+
+```ts
+import { headers } from 'next/headers'
+
+export async function GET(request: Request) {
+  const headersList = headers()
+  const referer = headersList.get('referer')
+
+  return new Response('Hello', {
+    status: 200,
+    headers: { referer: referer },
+  })
+}
+```
+
+---
+
+## Dynamic Route Segments
+
+```ts
+// app/items/[slug]/route.ts
+export async function GET(
+  request: Request,
+  { params }: { params: { slug: string } }
+) {
+  const slug = params.slug
+}
+```
+
+## URL Query Parameters
+
+```ts
+import { type NextRequest } from 'next/server'
+
+export function GET(request: NextRequest) {
+  const searchParams = request.nextUrl.searchParams
+  const query = searchParams.get('query')
+  // /api/search?query=hello → query = "hello"
+}
+```
+
+## リダイレクト
+
+```ts
+import { redirect } from 'next/navigation'
+
+export async function GET(request: Request) {
+  redirect('https://nextjs.org/')
+}
+```
+
+---
+
+## Request Body
+
+```ts
+export async function POST(request: Request) {
+  const res = await request.json()
+  return Response.json({ res })
+}
+```
+
+### FormData
+
+```ts
+export async function POST(request: Request) {
+  const formData = await request.formData()
+  const name = formData.get('name')
+  const email = formData.get('email')
+  return Response.json({ name, email })
+}
+```
+
+---
+
+## CORS
+
+```ts
+export async function GET(request: Request) {
+  return new Response('Hello', {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    },
+  })
+}
+```
+
+---
+
+## Streaming
+
+```ts
+import OpenAI from 'openai'
+import { OpenAIStream, StreamingTextResponse } from 'ai'
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+
+export const runtime = 'edge'
+
+export async function POST(req: Request) {
+  const { messages } = await req.json()
+  const response = await openai.chat.completions.create({
+    model: 'gpt-3.5-turbo',
+    stream: true,
+    messages,
+  })
+  const stream = OpenAIStream(response)
+  return new StreamingTextResponse(stream)
+}
+```
+
+---
+
+## Webhooks
+
+```ts
+export async function POST(request: Request) {
+  try {
+    const text = await request.text()
+    // Webhook ペイロードを処理
+  } catch (error) {
+    return new Response(`Webhook error: ${error.message}`, { status: 400 })
+  }
+  return new Response('Success!', { status: 200 })
+}
+```
+
+---
+
+## Segment Config Options
+
+```ts
+export const dynamic = 'auto'
+export const dynamicParams = true
+export const revalidate = false
+export const fetchCache = 'auto'
+export const runtime = 'nodejs'       // 'edge' も可
+export const preferredRegion = 'auto'
+```
+
+---
+
+## Non-UI Responses
+
+RSS, sitemap, robots.txt 等のレスポンスも可能:
+
+```ts
+export async function GET() {
+  return new Response(`<?xml version="1.0" encoding="UTF-8" ?>
+<rss version="2.0">
+  <channel>
+    <title>Next.js Documentation</title>
+    <link>https://nextjs.org/docs</link>
+  </channel>
+</rss>`, {
+    headers: { 'Content-Type': 'text/xml' },
+  })
+}
+```
+
+> `sitemap.xml`, `robots.txt`, `app icons`, `opengraph-image` にはビルトインサポートあり。
+
+
+============================================================
+Source: next14/07-middleware.md
+URL: https://nextjs-docs.example.com/next14/07-middleware
+============================================================
+
+# Next.js 14 App Router - Middleware
+
+> ソース: https://nextjs.org/docs/14/app/building-your-application/routing/middleware
+
+## 概要
+
+リクエストが完了する前にコードを実行。
+リクエストに基づいてレスポンスを書き換え、リダイレクト、ヘッダー変更、直接レスポンス返却が可能。
+
+**キャッシュされたコンテンツやルートマッチングの前に実行される。**
+
+## 規約
+
+プロジェクトルートに `middleware.ts`（or `.js`）を配置。
+`pages` や `app` と同じレベル、または `src` ディレクトリ内。
+
+```ts
+// middleware.ts
+import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
+
+export function middleware(request: NextRequest) {
+  return NextResponse.redirect(new URL('/home', request.url))
+}
+
+export const config = {
+  matcher: '/about/:path*',
+}
+```
+
+---
+
+## パスマッチング
+
+### 実行順序
+
+1. `next.config.js` の `headers`
+2. `next.config.js` の `redirects`
+3. **Middleware**（rewrites, redirects 等）
+4. `next.config.js` の `beforeFiles` rewrites
+5. ファイルシステムルート（`public/`, `_next/static/`, `pages/`, `app/` 等）
+6. `next.config.js` の `afterFiles` rewrites
+7. Dynamic Routes（`/blog/[slug]`）
+8. `next.config.js` の `fallback` rewrites
+
+### Matcher
+
+```js
+export const config = {
+  matcher: '/about/:path*',
+}
+
+// 複数パス
+export const config = {
+  matcher: ['/about/:path*', '/dashboard/:path*'],
+}
+```
+
+**一般的なパターン（静的ファイルを除外）:**
+
+```js
+export const config = {
+  matcher: [
+    '/((?!api|_next/static|_next/image|favicon.ico).*)',
+  ],
+}
+```
+
+**プリフェッチを除外:**
+
+```js
+export const config = {
+  matcher: [
+    {
+      source: '/((?!api|_next/static|_next/image|favicon.ico).*)',
+      missing: [
+        { type: 'header', key: 'next-router-prefetch' },
+        { type: 'header', key: 'purpose', value: 'prefetch' },
+      ],
+    },
+  ],
+}
+```
+
+**Matcher のルール:**
+- `/` で始まる必要がある
+- 名前付きパラメータ: `/about/:path` → `/about/a` にマッチ、`/about/a/c` にはマッチしない
+- 修飾子: `*`（0個以上）、`?`（0または1個）、`+`（1個以上）
+- 正規表現: `/about/(.*)` = `/about/:path*`
+
+### 条件文
+
+```ts
+export function middleware(request: NextRequest) {
+  if (request.nextUrl.pathname.startsWith('/about')) {
+    return NextResponse.rewrite(new URL('/about-2', request.url))
+  }
+  if (request.nextUrl.pathname.startsWith('/dashboard')) {
+    return NextResponse.rewrite(new URL('/dashboard/user', request.url))
+  }
+}
+```
+
+---
+
+## NextResponse API
+
+- `redirect`: 別URLにリダイレクト
+- `rewrite`: 指定URLのレスポンスを表示
+- リクエスト/レスポンスヘッダーの設定
+- レスポンスCookieの設定
+
+---
+
+## Cookies
+
+```ts
+export function middleware(request: NextRequest) {
+  // リクエストCookieの読み取り
+  let cookie = request.cookies.get('nextjs')
+  const allCookies = request.cookies.getAll()
+  request.cookies.has('nextjs')   // true
+  request.cookies.delete('nextjs')
+
+  // レスポンスCookieの設定
+  const response = NextResponse.next()
+  response.cookies.set('vercel', 'fast')
+  response.cookies.set({ name: 'vercel', value: 'fast', path: '/' })
+
+  return response
+}
+```
+
+---
+
+## ヘッダーの設定
+
+```ts
+export function middleware(request: NextRequest) {
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set('x-hello-from-middleware1', 'hello')
+
+  const response = NextResponse.next({
+    request: { headers: requestHeaders },
+  })
+
+  response.headers.set('x-hello-from-middleware2', 'hello')
+  return response
+}
+```
+
+---
+
+## 直接レスポンス
+
+```ts
+import { NextRequest } from 'next/server'
+import { isAuthenticated } from '@lib/auth'
+
+export const config = {
+  matcher: '/api/:function*',
+}
+
+export function middleware(request: NextRequest) {
+  if (!isAuthenticated(request)) {
+    return Response.json(
+      { success: false, message: 'authentication failed' },
+      { status: 401 }
+    )
+  }
+}
+```
+
+---
+
+## waitUntil
+
+バックグラウンド作業の実行:
+
+```ts
+export function middleware(req: NextRequest, event: NextFetchEvent) {
+  event.waitUntil(
+    fetch('https://my-analytics-platform.com', {
+      method: 'POST',
+      body: JSON.stringify({ pathname: req.nextUrl.pathname }),
+    })
+  )
+  return NextResponse.next()
+}
+```
+
+---
+
+## 高度なフラグ
+
+### skipTrailingSlashRedirect
+
+トレイリングスラッシュのリダイレクトを無効化:
+
+```js
+// next.config.js
+module.exports = { skipTrailingSlashRedirect: true }
+```
+
+### skipMiddlewareUrlNormalize
+
+URL正規化を無効化:
+
+```js
+// next.config.js
+module.exports = { skipMiddlewareUrlNormalize: true }
+```
+
+---
+
+## ランタイム
+
+Middleware は **Edge Runtime のみ**。Node.js Runtime は使用不可。
+
+
+============================================================
+Source: next14/08-error-handling.md
+URL: https://nextjs-docs.example.com/next14/08-error-handling
+============================================================
+
+# Next.js 14 App Router - エラーハンドリング
+
+> ソース: https://nextjs.org/docs/14/app/building-your-application/routing/error-handling
+
+## 概要
+
+`error.js` ファイル規約で、ネストされたルートのランタイムエラーをグレースフルに処理。
+
+- ルートセグメントとその子を React Error Boundary で自動ラップ
+- ファイルシステム階層で粒度を調整
+- エラーを影響を受けたセグメントに分離（他は機能し続ける）
+- フルページリロードなしでのエラーリカバリ機能
+
+---
+
+## 基本的な使い方
+
+```tsx
+// app/dashboard/error.tsx
+'use client'  // Error コンポーネントは Client Component である必要がある
+
+import { useEffect } from 'react'
+
+export default function Error({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string }
+  reset: () => void
+}) {
+  useEffect(() => {
+    console.error(error)  // エラーレポートサービスに送信
+  }, [error])
+
+  return (
+    <div>
+      <h2>Something went wrong!</h2>
+      <button onClick={() => reset()}>Try again</button>
+    </div>
+  )
+}
+```
+
+---
+
+## 仕組み
+
+```
+<Layout>
+  <ErrorBoundary fallback={<Error />}>  ← error.js
+    <Page />                             ← page.js
+  </ErrorBoundary>
+</Layout>
+```
+
+- `error.js` が React Error Boundary を作成し、子セグメントや `page.js` をラップ
+- エラー発生時、フォールバックコンポーネントがレンダリングされる
+- エラー境界より**上**のレイアウトは状態を維持し、インタラクティブなまま
+
+---
+
+## エラーリカバリ
+
+`reset()` 関数でError Boundaryの内容を再レンダリング試行:
+
+```tsx
+'use client'
+
+export default function Error({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string }
+  reset: () => void
+}) {
+  return (
+    <div>
+      <h2>Something went wrong!</h2>
+      <button onClick={() => reset()}>Try again</button>
+    </div>
+  )
+}
+```
+
+---
+
+## ネストされたルートでの挙動
+
+- エラーは最も近い親のエラー境界にバブルアップ
+- 異なるレベルに `error.js` を配置して粒度を調整
+
+**重要:** `error.js` は**同じセグメント**の `layout.js` や `template.js` のエラーをキャッチしない（エラー境界がそのレイアウトの**内側**にネストされるため）。
+
+---
+
+## レイアウトのエラーハンドリング
+
+特定のレイアウトのエラーを処理するには、**そのレイアウトの親セグメント**に `error.js` を配置。
+
+---
+
+## Root Layout のエラーハンドリング: `global-error.js`
+
+Root `app/error.js` は Root `app/layout.js` のエラーをキャッチ**しない**。
+
+→ `app/global-error.js` を使用:
+
+```tsx
+// app/global-error.tsx
+'use client'
+
+export default function GlobalError({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string }
+  reset: () => void
+}) {
+  return (
+    <html>
+      <body>
+        <h2>Something went wrong!</h2>
+        <button onClick={() => reset()}>Try again</button>
+      </body>
+    </html>
+  )
+}
+```
+
+**重要:**
+- `global-error.js` はアプリケーション全体をラップ
+- Root Layout を置き換えるため、`<html>` と `<body>` を定義する必要がある
+- 最も粒度が粗いエラーUI
+- `global-error.js` があっても、Root `error.js` も定義推奨
+
+---
+
+## サーバーエラーの処理
+
+Server Component 内でエラーが発生した場合:
+- Next.js が `Error` オブジェクト（本番環境では機密情報を削除）を最も近い `error.js` に転送
+
+### 本番環境のセキュリティ
+
+- `message`: エラーの汎用メッセージ
+- `digest`: 自動生成されたエラーハッシュ（サーバーサイドログとの照合用）
+
+開発環境では元の `message` がクライアントに送信される（デバッグ容易化）。
+
+
+============================================================
+Source: next14/09-loading-streaming.md
+URL: https://nextjs-docs.example.com/next14/09-loading-streaming
+============================================================
+
+# Next.js 14 App Router - Loading UI & Streaming
+
+> ソース: https://nextjs.org/docs/14/app/building-your-application/routing/loading-ui-and-streaming
+
+## loading.js
+
+`loading.js` で React Suspense を使ったローディングUIを作成。
+
+```tsx
+// app/dashboard/loading.tsx
+export default function Loading() {
+  return <LoadingSkeleton />
+}
+```
+
+### 動作
+
+- `loading.js` は `layout.js` の中にネスト
+- `page.js` とその配下を `<Suspense>` 境界で自動ラップ
+
+```
+<Layout>
+  <Suspense fallback={<Loading />}>
+    <Page />
+  </Suspense>
+</Layout>
+```
+
+**特徴:**
+- ナビゲーションは即座（サーバーセントリックルーティングでも）
+- ナビゲーションは中断可能（ルートコンテンツのロード完了を待たずに別ルートへ移動可能）
+- 新しいルートセグメントのロード中も共有レイアウトはインタラクティブ
+
+---
+
+## Streaming with Suspense
+
+`loading.js` に加え、独自の `<Suspense>` 境界を手動で作成可能。
+
+### SSR の課題と Streaming の解決
+
+**従来のSSR（順次・ブロッキング）:**
+1. サーバーでページの全データをフェッチ
+2. サーバーでHTMLをレンダリング
+3. HTML, CSS, JS をクライアントに送信
+4. 非インタラクティブUIを表示
+5. React がハイドレーション → インタラクティブ化
+
+**Streaming:**
+- ページのHTMLをチャンクに分割して順次送信
+- データのロード完了を待たずにUIの一部を先に表示
+- 優先度の高いコンポーネントを先に送信可能
+
+### メリット
+
+- **TTFB** の改善
+- **FCP** の改善
+- **TTI** の改善（特に低速デバイス）
+
+### Suspense の使い方
+
+```tsx
+import { Suspense } from 'react'
+import { PostFeed, Weather } from './Components'
+
+export default function Posts() {
+  return (
+    <section>
+      <Suspense fallback={<p>Loading feed...</p>}>
+        <PostFeed />
+      </Suspense>
+      <Suspense fallback={<p>Loading weather...</p>}>
+        <Weather />
+      </Suspense>
+    </section>
+  )
+}
+```
+
+**Suspense の利点:**
+1. **Streaming Server Rendering**: サーバーからクライアントへHTMLを順次レンダリング
+2. **Selective Hydration**: ユーザーインタラクションに基づいてハイドレーション優先度を決定
+
+---
+
+## SEO
+
+- `generateMetadata` 内のデータフェッチが完了するまでUIストリーミングを待機 → `<head>` タグが最初に含まれる
+- ストリーミングはサーバーレンダリングのためSEOに影響なし
+
+## ステータスコード
+
+- ストリーミング中は `200` が返される
+- レスポンスヘッダーは既に送信済みのため、ステータスコードの変更は不可
+- `redirect` や `notFound` はストリーミングコンテンツ内でエラーを通知
+- SEO には影響しない
+
+
+============================================================
+Source: next15/00-overview.md
+URL: https://nextjs-docs.example.com/next15/00-overview
+============================================================
+
+# Next.js 15 - 変更概要
+
+> ソース: https://nextjs.org/blog/next-15
+
+Next.js 15 は React 19 対応、キャッシュデフォルトの変更、非同期API化など、大きな変更を含むメジャーアップデート。
+
+## アップグレード方法
+
+```bash
+# 自動アップグレードCLI（推奨）
+npx @next/codemod@canary upgrade latest
+
+# 手動アップグレード
+npm install next@latest react@latest react-dom@latest
+```
+
+---
+
+## 破壊的変更一覧
+
+| カテゴリ | 変更内容 | 影響度 |
+|---------|---------|--------|
+| **非同期API** | `cookies()`, `headers()`, `draftMode()`, `params`, `searchParams` が非同期に | 高 |
+| **キャッシュデフォルト** | `fetch` のデフォルトが `no-store` に変更 | 高 |
+| **Route Handler** | `GET` がデフォルトでキャッシュされなくなった | 高 |
+| **Router Cache** | Page のデフォルト `staleTime` が `0` に | 中 |
+| **next/image** | `squoosh` 削除、`Content-Disposition: attachment` に変更 | 中 |
+| **next/font** | 外部 `@next/font` パッケージ削除、`font-family` ハッシュ削除 | 低 |
+| **next/dynamic** | `suspense` prop 削除、Server Component での `ssr: false` 禁止 | 中 |
+| **Middleware** | `react-server` 条件が適用（React APIインポート制限） | 低 |
+| **Config 名変更** | `serverComponentsExternalPackages` → `serverExternalPackages` | 低 |
+| **Config 名変更** | `bundlePagesExternals` → `bundlePagesRouterDependencies` | 低 |
+| **Runtime** | `experimental-edge` → `edge` に変更 | 低 |
+| **再検証** | レンダリング中の `revalidateTag`/`revalidatePath` がエラーに | 中 |
+| **NextRequest** | `geo` / `ip` プロパティ削除（ホスティングプロバイダが提供） | 中 |
+| **Speed Insights** | 自動計測が削除。`@vercel/speed-insights` パッケージを使用 | 低 |
+| **Node.js** | 最小バージョンが 18.18.0 に | 低 |
+
+---
+
+## 新機能一覧
+
+| 機能 | 説明 | 状態 |
+|------|------|------|
+| **React 19** | React 19 対応、新しいフック（`useActionState` 等） | 安定版 |
+| **React Compiler** | 自動メモ化（`useMemo`/`useCallback` 不要に） | 実験的 |
+| **Turbopack Dev** | `next dev --turbo` が安定版に（最大76%高速化） | 安定版 |
+| **`<Form>` コンポーネント** | `next/form` によるプリフェッチ付きフォーム | 安定版 |
+| **`next.config.ts`** | TypeScript で設定ファイルが書ける | 安定版 |
+| **`instrumentation.js`** | サーバーライフサイクルの監視API | 安定版 |
+| **`unstable_after`** | レスポンス送信後にコード実行 | 実験的 |
+| **Static Route Indicator** | 開発時に静的/動的ルートを視覚表示 | 安定版 |
+| **Server Actions セキュリティ強化** | 推測不能なID、未使用アクションの自動削除 | 安定版 |
+| **ESLint 9** | ESLint 9 + eslint-plugin-react-hooks v5 対応 | 安定版 |
+| **セルフホスティング改善** | `Cache-Control` のカスタマイズ強化、`sharp` 自動使用 | 安定版 |
+
+---
+
+## 主要な変更の詳細
+
+### 非同期 Request API
+
+v14 で同期だったAPIが全て非同期に:
+
+```tsx
+// v14（同期）
+import { cookies } from 'next/headers'
+const cookieStore = cookies()
+const token = cookieStore.get('token')
+
+// v15（非同期）
+import { cookies } from 'next/headers'
+const cookieStore = await cookies()
+const token = cookieStore.get('token')
+```
+
+**対象API:** `cookies()`, `headers()`, `draftMode()`, `params`, `searchParams`
+
+**一時的な同期アクセス（移行用）:**
+
+完全に非同期化する前の移行期間中は、`UnsafeUnwrapped*` 型を使って同期的にアクセス可能（開発環境で警告が出る）:
+
+```tsx
+import { cookies, type UnsafeUnwrappedCookies } from 'next/headers'
+const cookieStore = cookies() as unknown as UnsafeUnwrappedCookies
+```
+
+**同期コンポーネントでの `use()` フック:**
+
+`async` にできないコンポーネント（Client Component等）では `use()` を使用:
+
+```tsx
+'use client'
+import { use } from 'react'
+
+export default function Page({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = use(params)
+  // ...
+}
+```
+
+自動移行コマンド:
+```bash
+npx @next/codemod@canary next-async-request-api .
+```
+
+### キャッシュデフォルトの変更
+
+```tsx
+// v14: デフォルトで cache: 'force-cache'（キャッシュされる）
+fetch('https://...')
+
+// v15: デフォルトで cache: 'no-store'（キャッシュされない）
+fetch('https://...')
+
+// v15: 明示的にキャッシュする場合
+fetch('https://...', { cache: 'force-cache' })
+
+// v15: ページ全体のfetchをまとめてキャッシュする場合
+// export const fetchCache = 'default-cache'
+```
+
+### React 19 の主な変更
+
+| v14（React 18） | v15（React 19） |
+|-----------------|-----------------|
+| `useFormState` | `useActionState` |
+| `ref` を `forwardRef` で転送 | `ref` が通常のpropsとして利用可能 |
+| `<Context.Provider>` | `<Context>` で直接使用可能 |
+| `useDeferredValue(value)` | `useDeferredValue(value, initialValue)` |
+| Cleanup 不要の `ref` コールバック | `ref` コールバックにクリーンアップ関数 |
+
+---
+
+## 各トピック別の変更
+
+各トピックの詳細は以下のページを参照:
+
+- [ルーティング](./01-routing) — `params`/`searchParams` の非同期化
+- [レンダリング](./02-rendering) — React 19、Turbopack、Hydration改善
+- [データフェッチング](./03-data-fetching) — キャッシュデフォルト変更
+- [Server Actions](./04-server-actions) — セキュリティ強化、`useActionState`
+- [キャッシング](./05-caching) — デフォルト大幅変更
+- [Route Handlers](./06-route-handlers) — GET キャッシュ無効化、非同期API
+- [Middleware](./07-middleware) — react-server 条件
+- [エラーハンドリング](./08-error-handling) — Hydration エラー改善
+- [Loading & Streaming](./09-loading-streaming) — 変更なし
+- [新機能・新API](./10-new-apis) — Form, instrumentation, after, next.config.ts
+
+
+============================================================
+Source: next15/01-routing.md
+URL: https://nextjs-docs.example.com/next15/01-routing
+============================================================
+
+# Next.js 15 App Router - ルーティング
+
+> ソース: https://nextjs.org/docs/app/building-your-application/routing
+
+## 基本用語
+
+- **Tree**: 階層構造を可視化する規約（コンポーネントツリー、フォルダ構造等）
+- **Subtree**: ツリーの一部。新しいルート（最初）からリーフ（最後）まで
+- **Root**: ツリーまたはサブツリーの最初のノード（ルートレイアウトなど）
+- **Leaf**: 子を持たないノード（URLパスの最後のセグメント）
+- **URL Segment**: スラッシュで区切られたURLパスの一部
+- **URL Path**: ドメインの後に続くURL部分（セグメントで構成）
+
+## App Router の基本
+
+- `app` ディレクトリ内で動作
+- **デフォルトで Server Components**
+- React Server Components 上に構築
+- 共有レイアウト、ネストされたルーティング、ローディング状態、エラーハンドリングをサポート
+
+## フォルダとファイルの役割
+
+- **フォルダ** = ルートを定義
+- **ファイル** = ルートセグメントに表示されるUIを作成
+
+```
+app/
+├── layout.tsx        # ルートレイアウト（必須）
+├── page.tsx          # `/` のUI
+├── dashboard/
+│   ├── layout.tsx    # dashboardレイアウト
+│   ├── page.tsx      # `/dashboard` のUI
+│   └── settings/
+│       └── page.tsx  # `/dashboard/settings` のUI
+```
+
+## 特殊ファイル規約
+
+| ファイル | 役割 |
+|---------|------|
+| `layout.js` | セグメントとその子の共有UI |
+| `page.js` | ルート固有のUI（ルートを公開アクセス可能にする） |
+| `loading.js` | セグメントとその子のローディングUI |
+| `not-found.js` | 404 UI |
+| `error.js` | エラーUI |
+| `global-error.js` | グローバルエラーUI |
+| `route.js` | サーバーサイドAPIエンドポイント |
+| `template.js` | 再レンダリングされるレイアウトUI |
+| `default.js` | Parallel Routesのフォールバック |
+
+> `.js`, `.jsx`, `.tsx` いずれも使用可能
+
+## コンポーネント階層（レンダリング順序）
+
+```
+<Layout>
+  <Template>
+    <ErrorBoundary fallback={<Error />}>
+      <Suspense fallback={<Loading />}>
+        <ErrorBoundary fallback={<NotFound />}>
+          <Page />
+        </ErrorBoundary>
+      </Suspense>
+    </ErrorBoundary>
+  </Template>
+</Layout>
+```
+
+## コロケーション
+
+`app` ディレクトリ内にコンポーネント、スタイル、テストなどを配置可能。
+**`page.js` または `route.js` の内容のみが公開アクセス可能**。
+
+---
+
+## ルートの定義
+
+> ソース: https://nextjs.org/docs/app/building-your-application/routing/defining-routes
+
+- フォルダでルートを定義
+- `page.js` ファイルでルートセグメントを公開
+
+```tsx
+// app/page.tsx → `/`
+export default function Page() {
+  return <h1>Hello, Next.js!</h1>
+}
+```
+
+---
+
+## Pages と Layouts
+
+> ソース: https://nextjs.org/docs/app/building-your-application/routing/pages
+
+### Pages
+
+- ルート固有の**ユニークなUI**
+- デフォルトで Server Component
+
+⚠️ 破壊的変更:
+`searchParams` prop が**非同期**に変更された。`await` が必要。
+
+
+```tsx
+// v14
+export default function Page({
+  searchParams,
+}: {
+  searchParams: { query: string }
+}) {
+  const query = searchParams.query
+}
+
+// v15 — async コンポーネント
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ query: string }>
+}) {
+  const { query } = await searchParams
+}
+
+// v15 — Client Component（use() を使用）
+'use client'
+import { use } from 'react'
+
+export default function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ query: string }>
+}) {
+  const { query } = use(searchParams)
+}
+```
+
+### Layouts
+
+- 複数ページ間で**共有されるUI**
+- ナビゲーション時に状態を保持、再レンダリングしない
+- `children` プロップを受け取る
+
+```tsx
+// app/dashboard/layout.tsx
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <section>
+      <nav></nav>
+      {children}
+    </section>
+  )
+}
+```
+
+### Root Layout（必須）
+
+```tsx
+// app/layout.tsx
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <html lang="en">
+      <body>{children}</body>
+    </html>
+  )
+}
+```
+
+### Templates
+
+- レイアウトと似ているが、ナビゲーション時に**新しいインスタンスを作成**
+- DOM再作成、状態は保持されない
+
+---
+
+## Dynamic Routes
+
+> ソース: https://nextjs.org/docs/app/building-your-application/routing/dynamic-routes
+
+### 基本
+
+⚠️ 破壊的変更:
+`params` prop が**非同期**に変更された。`await` が必要。
+
+
+```tsx
+// v14
+export default function Page({ params }: { params: { slug: string } }) {
+  return <div>My Post: {params.slug}</div>
+}
+
+// v15（非同期に変更）
+export default async function Page({
+  params,
+}: {
+  params: Promise<{ slug: string }>
+}) {
+  const { slug } = await params
+  return <div>My Post: {slug}</div>
+}
+```
+
+**影響を受けるファイル:** `layout.js`, `page.js`, `route.js`, `default.js`, `generateMetadata`, `generateViewport`
+
+### generateStaticParams
+
+ビルド時にルートを静的に生成（変更なし）:
+
+```tsx
+export async function generateStaticParams() {
+  const posts = await fetch('https://.../posts').then((res) => res.json())
+  return posts.map((post) => ({ slug: post.slug }))
+}
+```
+
+### Catch-all Segments
+
+| パターン | 例 | マッチ |
+|---------|---|--------|
+| `[slug]` | `/blog/a` | 単一セグメント |
+| `[...slug]` | `/shop/a/b/c` | 1つ以上のセグメント |
+| `[[...slug]]` | `/shop` も `/shop/a/b` も | 0個以上のセグメント |
+
+---
+
+## Route Groups
+
+フォルダ名を丸括弧で囲む: `(folderName)` → **URLパスに影響しない**
+
+```
+app/
+├── (marketing)/
+│   ├── layout.tsx      # マーケティング用レイアウト
+│   ├── about/page.tsx  # /about
+│   └── blog/page.tsx   # /blog
+├── (shop)/
+│   ├── layout.tsx      # ショップ用レイアウト
+│   └── cart/page.tsx   # /cart
+```
+
+---
+
+## リンクとナビゲーション
+
+> ソース: https://nextjs.org/docs/app/building-your-application/routing/linking-and-navigating
+
+### `<Link>` コンポーネント
+
+```tsx
+import Link from 'next/link'
+
+export default function Page() {
+  return <Link href="/dashboard">Dashboard</Link>
+}
+```
+
+### `useRouter` Hook
+
+```tsx
+'use client'
+import { useRouter } from 'next/navigation'
+
+export default function Page() {
+  const router = useRouter()
+  return (
+    <button onClick={() => router.push('/dashboard')}>
+      Dashboard
+    </button>
+  )
+}
+```
+
+### ナビゲーションの仕組み
+
+1. **コード分割**: ルートセグメントごとに自動分割
+2. **プリフェッチ**: `<Link>` がビューポートに表示されると自動プリフェッチ
+
+⚡ 動作変更:
+Client Router Cache のデフォルトが変更。Page の `staleTime` が `0` に。ナビゲーション時に常に最新データを取得するようになった。
+
+
+3. **キャッシング**: Router Cache（インメモリクライアントサイドキャッシュ）
+4. **部分レンダリング**: 変更されたセグメントのみ再レンダリング
+5. **ソフトナビゲーション**: ページリロードなし、React状態を保持
+
+✅ 新機能:
+クライアントプリフェッチが `priority` 属性を使用するようになり、ブラウザによるリソース優先度制御が改善。
+
+
+
+============================================================
+Source: next15/02-rendering.md
+URL: https://nextjs-docs.example.com/next15/02-rendering
+============================================================
+
+# Next.js 15 App Router - レンダリング（Server/Client Components）
+
+> ソース: https://nextjs.org/docs/app/building-your-application/rendering
+
+## Server Components vs Client Components 使い分け
+
+| やりたいこと | Server | Client |
+|------------|--------|--------|
+| データフェッチ | o | |
+| バックエンドリソースに直接アクセス | o | |
+| 機密情報をサーバーに保持（トークン、APIキー） | o | |
+| 大きな依存関係をサーバーに保持 / クライアントJS削減 | o | |
+| インタラクティブ性、イベントリスナー（onClick, onChange等） | | o |
+| State、Lifecycle Effects（useState, useEffect等） | | o |
+| ブラウザ専用API | | o |
+| state/effects/ブラウザAPIに依存するカスタムフック | | o |
+| React クラスコンポーネント | | o |
+
+---
+
+## Server Components
+
+### 利点
+
+- **データフェッチ**: サーバー側でデータソースに近い場所でフェッチ
+- **セキュリティ**: トークンやAPIキーをクライアントに露出しない
+- **キャッシング**: レンダリング結果をキャッシュ、リクエスト・ユーザー間で再利用
+- **バンドルサイズ**: 大きな依存関係をサーバーに保持
+- **初期ページロード / FCP**: サーバーでHTML生成
+- **SEO**: レンダリング済みHTMLを検索エンジンがインデックス
+- **ストリーミング**: レンダリングをチャンクに分割して順次送信
+
+### レンダリングプロセス
+
+**サーバー側:**
+1. React が Server Components を **RSC Payload** にレンダリング
+2. Next.js が RSC Payload と Client Component JS を使って **HTML** をレンダリング
+
+**クライアント側:**
+1. HTML で非インタラクティブなプレビューを即座に表示
+2. RSC Payload で Client/Server Component ツリーを照合、DOM を更新
+3. JS でClient Components を**ハイドレーション**
+
+---
+
+## サーバーレンダリング戦略
+
+### 1. Static Rendering（デフォルト）
+
+- **ビルド時**にレンダリング
+- 結果がキャッシュされCDNに配信可能
+
+### 2. Dynamic Rendering
+
+- **リクエスト時**に各ユーザーごとにレンダリング
+
+⚠️ 破壊的変更:
+Dynamic Functions（`cookies()`, `headers()`）が非同期に変更された。これらを使用する場合は `await` が必要。
+
+
+```tsx
+// v14
+import { cookies } from 'next/headers'
+const cookieStore = cookies()
+
+// v15
+import { cookies } from 'next/headers'
+const cookieStore = await cookies()
+```
+
+### 3. Streaming
+
+- サーバーからUIをチャンク単位で順次レンダリング
+- `loading.js` と React `<Suspense>` で実現
+
+---
+
+## Client Components
+
+### 使い方
+
+ファイルの先頭に `"use client"` ディレクティブを追加:
+
+```tsx
+'use client'
+
+import { useState } from 'react'
+
+export default function Counter() {
+  const [count, setCount] = useState(0)
+  return (
+    <div>
+      <p>You clicked {count} times</p>
+      <button onClick={() => setCount(count + 1)}>Click me</button>
+    </div>
+  )
+}
+```
+
+---
+
+## React 19 対応
+
+✅ 新機能:
+Next.js 15 は React 19 を採用。以下の新機能が利用可能。
+
+
+### `ref` が props として直接利用可能
+
+`forwardRef` が不要に:
+
+```tsx
+// v14（React 18）— forwardRef が必要
+const Input = forwardRef<HTMLInputElement, InputProps>((props, ref) => {
+  return <input ref={ref} {...props} />
+})
+
+// v15（React 19）— ref が直接 props に
+function Input({ ref, ...props }: InputProps & { ref?: React.Ref<HTMLInputElement> }) {
+  return <input ref={ref} {...props} />
+}
+```
+
+### `<Context>` を直接 Provider として使用
+
+```tsx
+// v14（React 18）
+<ThemeContext.Provider value="dark">
+  {children}
+</ThemeContext.Provider>
+
+// v15（React 19）
+<ThemeContext value="dark">
+  {children}
+</ThemeContext>
+```
+
+### ref コールバックのクリーンアップ
+
+```tsx
+// v15（React 19）— クリーンアップ関数を返せる
+<input ref={(node) => {
+  // マウント時
+  node.focus()
+  // クリーンアップ（アンマウント時）
+  return () => {
+    // cleanup
+  }
+}} />
+```
+
+### `useDeferredValue` に初期値
+
+```tsx
+// v14
+const deferredValue = useDeferredValue(value)
+
+// v15 — 初期値を指定可能
+const deferredValue = useDeferredValue(value, 'loading...')
+```
+
+---
+
+## Turbopack Dev
+
+✅ 新機能:
+`next dev --turbo` が安定版に。開発体験が大幅に向上。
+
+
+```bash
+next dev --turbo
+```
+
+**パフォーマンス改善:**
+- ローカルサーバー起動: 最大 **76.7%** 高速化
+- Fast Refresh: 最大 **96.3%** 高速化
+- 初回ルートコンパイル: 最大 **45.8%** 高速化
+
+---
+
+## Hydration エラーの改善
+
+✅ 新機能:
+Hydration エラーのエラービューが改善。エラーのソースコードと修正提案が表示されるように。
+
+
+v14.1 から始まった改善がさらに強化され、エラーの原因と解決策がより明確に表示される。
+
+---
+
+## 構成パターン
+
+### Client Components をツリーの下部に移動
+
+```tsx
+import SearchBar from './searchbar'  // Client Component
+import Logo from './logo'            // Server Component
+
+export default function Layout({ children }: { children: React.ReactNode }) {
+  return (
+    <>
+      <nav>
+        <Logo />
+        <SearchBar />
+      </nav>
+      <main>{children}</main>
+    </>
+  )
+}
+```
+
+### Server→Client にデータを渡す
+
+Props は**シリアライズ可能**である必要がある。
+
+### Server→Client コンポーネントのインターリービング
+
+**NG: Client Component 内で Server Component をインポート**
+```tsx
+'use client'
+import ServerComponent from './Server-Component'  // NG!
+```
+
+**OK: Server Component を children/props として渡す**
+```tsx
+// app/page.tsx (Server Component)
+import ClientComponent from './client-component'
+import ServerComponent from './server-component'
+
+export default function Page() {
+  return (
+    <ClientComponent>
+      <ServerComponent />
+    </ClientComponent>
+  )
+}
+```
+
+### server-only パッケージ
+
+```ts
+import 'server-only'
+
+export async function getData() {
+  const res = await fetch('https://external-service.com/data', {
+    headers: { authorization: process.env.API_KEY! },
+  })
+  return res.json()
+}
+```
+
+---
+
+## Static Route Indicator
+
+✅ 新機能:
+開発中に静的ルートと動的ルートを視覚的に区別するインジケーターが表示される。
+
+
+`next build` の出力でも全ルートのレンダリング戦略が確認可能。
+
+無効化する場合:
+```ts
+// next.config.ts
+const nextConfig = {
+  devIndicators: {
+    appIsrStatus: false,
+  },
+}
+```
+
+---
+
+## React Compiler（実験的）
+
+✅ 新機能:
+React Compiler により `useMemo`/`useCallback` の手動最適化が不要に（実験的）。
+
+
+```ts
+// next.config.ts
+const nextConfig = {
+  experimental: {
+    reactCompiler: true,
+  },
+}
+```
+
+> 現時点では Babel プラグインとして動作するため、開発・ビルド時間が若干増加する。
+
+
+============================================================
+Source: next15/03-data-fetching.md
+URL: https://nextjs-docs.example.com/next15/03-data-fetching
+============================================================
+
+# Next.js 15 App Router - データフェッチング
+
+> ソース: https://nextjs.org/docs/app/building-your-application/data-fetching
+
+## データフェッチの4つの方法
+
+1. サーバーで `fetch` を使用
+2. サーバーでサードパーティライブラリを使用
+3. クライアントで Route Handler 経由
+4. クライアントでサードパーティライブラリ（SWR, TanStack Query等）
+
+---
+
+## サーバーでの fetch
+
+Next.js はネイティブ `fetch` を拡張し、キャッシングと再検証の挙動を設定可能。
+React は `fetch` を自動メモ化。
+
+```tsx
+async function getData() {
+  const res = await fetch('https://api.example.com/...')
+
+  if (!res.ok) {
+    throw new Error('Failed to fetch data')
+  }
+
+  return res.json()
+}
+
+export default async function Page() {
+  const data = await getData()
+  return <main>{/* ... */}</main>
+}
+```
+
+---
+
+## キャッシング
+
+⚠️ 破壊的変更:
+`fetch` のデフォルトキャッシュ動作が変更。v14 では `force-cache`（キャッシュする）がデフォルトだったが、v15 では `no-store`（キャッシュしない）がデフォルトに。
+
+
+```tsx
+// v14: デフォルトでキャッシュされる（force-cache）
+fetch('https://...')
+
+// v15: デフォルトでキャッシュされない（no-store）
+fetch('https://...')
+
+// v15: 明示的にキャッシュする場合
+fetch('https://...', { cache: 'force-cache' })
+```
+
+### ページ全体のfetchをまとめてキャッシュ
+
+`fetchCache` セグメント設定で、個別に `cache` を指定しない全ての `fetch` にデフォルトキャッシュを適用:
+
+```js
+// app/layout.js
+export const fetchCache = 'default-cache'
+
+export default async function RootLayout() {
+  const a = await fetch('https://...')                        // キャッシュされる
+  const b = await fetch('https://...', { cache: 'no-store' }) // キャッシュされない（個別指定が優先）
+}
+```
+
+### v14 との比較
+
+| 動作 | v14 デフォルト | v15 デフォルト |
+|------|-------------|-------------|
+| `fetch('https://...')` | `force-cache`（キャッシュ） | `no-store`（非キャッシュ） |
+| キャッシュを有効にする | 不要（デフォルト） | `{ cache: 'force-cache' }` を明示 |
+| キャッシュを無効にする | `{ cache: 'no-store' }` を明示 | 不要（デフォルト） |
+
+⚡ 動作変更:
+`force-dynamic` を設定した場合、fetch キャッシュのデフォルトが `no-store` に設定されるようになった（v14 では `force-dynamic` と fetch キャッシュは独立していた）。
+
+
+---
+
+## 再検証（Revalidation）
+
+### 時間ベースの再検証
+
+```js
+fetch('https://...', { next: { revalidate: 3600 } })  // 1時間
+```
+
+または Route Segment Config:
+```tsx
+export const revalidate = 3600
+```
+
+### オンデマンド再検証
+
+#### パスベース: `revalidatePath`
+```ts
+'use server'
+import { revalidatePath } from 'next/cache'
+
+export async function action() {
+  revalidatePath('/posts')
+}
+```
+
+#### タグベース: `revalidateTag`
+```tsx
+// フェッチ時にタグ付け
+const res = await fetch('https://...', { next: { tags: ['collection'] } })
+
+// Server Action でタグを再検証
+'use server'
+import { revalidateTag } from 'next/cache'
+
+export async function action() {
+  revalidateTag('collection')
+}
+```
+
+⚠️ 破壊的変更:
+レンダリング中に `revalidateTag` / `revalidatePath` を呼び出すとエラーがスローされるようになった。Server Action または Route Handler 内で使用すること。
+
+
+---
+
+## サードパーティライブラリでのフェッチ（サーバー）
+
+`fetch` を使わないDB・CMS・ORMクライアントの場合:
+
+```ts
+import { cache } from 'react'
+
+export const getItem = cache(async (id: string) => {
+  const item = await db.item.findUnique({ id })
+  return item
+})
+```
+
+```tsx
+// app/item/[id]/layout.tsx
+import { getItem } from '@/utils/get-item'
+
+export const revalidate = 3600
+
+export default async function Layout({
+  params,
+}: {
+  params: Promise<{ id: string }>
+}) {
+  const { id } = await params  // v15: params は非同期
+  const item = await getItem(id)
+  // ...
+}
+```
+
+---
+
+## クライアントでのフェッチ
+
+### Route Handler 経由
+
+Client Component から Route Handler を呼び出してデータ取得。
+
+### サードパーティライブラリ
+
+- **SWR**: https://swr.vercel.app/
+- **TanStack Query**: https://tanstack.com/query/latest
+
+---
+
+## データフェッチパターン
+
+### 並列データフェッチ
+
+`Promise.all` でウォーターフォールを回避:
+
+```tsx
+async function Page() {
+  const artistData = getArtist(id)
+  const albumsData = getAlbums(id)
+
+  const [artist, albums] = await Promise.all([artistData, albumsData])
+  // ...
+}
+```
+
+---
+
+## Server Components HMR Cache
+
+✅ 新機能:
+開発中の HMR（Hot Module Replacement）時に、Server Components の `fetch` レスポンスが再利用されるようになった。API呼び出しの重複を削減し、開発コストを低減。
+
+
+無効化する場合:
+```ts
+// next.config.ts
+const nextConfig = {
+  experimental: {
+    serverComponentsHmrCache: false,
+  },
+}
+```
+
+---
+
+## Static Generation の最適化
+
+✅ 新機能:
+静的生成のビルド時間が改善。ページのレンダリングが1回で済むようになり（v14では2回）、`fetch` キャッシュがワーカー間で共有される。
+
+
+高度な制御（実験的）:
+```ts
+const nextConfig = {
+  experimental: {
+    staticGenerationRetryCount: 1,        // 失敗時のリトライ回数
+    staticGenerationMaxConcurrency: 8,    // ワーカーあたりの同時処理数
+    staticGenerationMinPagesPerWorker: 25, // 新ワーカー起動の最小ページ数
+  },
+}
+```
+
+
+============================================================
+Source: next15/04-server-actions.md
+URL: https://nextjs-docs.example.com/next15/04-server-actions
+============================================================
+
+# Next.js 15 App Router - Server Actions & Mutations
+
+> ソース: https://nextjs.org/docs/app/building-your-application/data-fetching/server-actions-and-mutations
+
+## 概要
+
+Server Actions = サーバーで実行される**非同期関数**。
+フォーム送信とデータミューテーションを処理。
+
+## 定義方法
+
+### Server Component 内（インライン）
+
+```tsx
+export default function Page() {
+  async function create() {
+    'use server'
+    // サーバーで実行される
+  }
+
+  return <form action={create}>...</form>
+}
+```
+
+### 別ファイル（Client Component から使用する場合）
+
+```ts
+// app/actions.ts
+'use server'
+
+export async function create() {
+  // ...
+}
+```
+
+## 動作特性
+
+- `<form>` の `action` 属性で呼び出し可能
+- Server Components ではプログレッシブエンハンスメント（JS無しでもフォーム送信可能）
+- `POST` メソッドのみで呼び出される
+- 引数と返り値はシリアライズ可能である必要がある
+
+---
+
+## セキュリティ強化
+
+✅ 新機能:
+Server Actions のセキュリティが強化された。
+
+
+### 推測不能なアクションID
+
+Next.js が非決定論的なIDを生成し、ビルドごとに再計算:
+
+```tsx
+// app/actions.js
+'use server'
+
+// 使用されているアクション → セキュアなIDでクライアントから参照可能
+export async function updateUserAction(formData) {}
+
+// 未使用のアクション → next build で自動削除、公開エンドポイントにならない
+export async function deleteUserAction(formData) {}
+```
+
+### Dead Code Elimination
+
+未使用の Server Actions がクライアントバンドルに含まれなくなり、バンドルサイズが削減。
+
+---
+
+## フォーム操作
+
+### 基本的なフォーム
+
+```tsx
+export default function Page() {
+  async function createInvoice(formData: FormData) {
+    'use server'
+    const rawFormData = {
+      customerId: formData.get('customerId'),
+      amount: formData.get('amount'),
+      status: formData.get('status'),
+    }
+    // データミューテーション & キャッシュ再検証
+  }
+
+  return <form action={createInvoice}>...</form>
+}
+```
+
+### 追加引数を渡す（bind）
+
+```tsx
+'use client'
+import { updateUser } from './actions'
+
+export function UserProfile({ userId }: { userId: string }) {
+  const updateUserWithId = updateUser.bind(null, userId)
+  return (
+    <form action={updateUserWithId}>
+      <input type="text" name="name" />
+      <button type="submit">Update User Name</button>
+    </form>
+  )
+}
+```
+
+### Pending State（useFormStatus）
+
+```tsx
+'use client'
+import { useFormStatus } from 'react-dom'
+
+export function SubmitButton() {
+  const { pending } = useFormStatus()
+  return (
+    <button type="submit" aria-disabled={pending}>
+      Add
+    </button>
+  )
+}
+```
+
+### サーバーサイドバリデーション
+
+⚠️ 破壊的変更:
+`useFormState` が `useActionState` に名前変更（React 19）。`react-dom` ではなく `react` からインポート。
+
+
+```tsx
+// v14 — useFormState（react-dom）
+import { useFormState } from 'react-dom'
+
+// v15 — useActionState（react）
+import { useActionState } from 'react'
+```
+
+```ts
+// app/actions.ts
+'use server'
+import { z } from 'zod'
+
+const schema = z.object({
+  email: z.string({ invalid_type_error: 'Invalid Email' }),
+})
+
+export async function createUser(prevState: any, formData: FormData) {
+  const validatedFields = schema.safeParse({
+    email: formData.get('email'),
+  })
+
+  if (!validatedFields.success) {
+    return { errors: validatedFields.error.flatten().fieldErrors }
+  }
+
+  return { message: 'Success' }
+}
+```
+
+```tsx
+'use client'
+import { useActionState } from 'react'
+import { createUser } from '@/app/actions'
+
+const initialState = { message: '' }
+
+export function Signup() {
+  const [state, formAction, isPending] = useActionState(createUser, initialState)
+
+  return (
+    <form action={formAction}>
+      <label htmlFor="email">Email</label>
+      <input type="text" id="email" name="email" required />
+      <p aria-live="polite">{state?.message}</p>
+      <button disabled={isPending}>Sign up</button>
+    </form>
+  )
+}
+```
+
+**`useActionState` vs `useFormState` の違い:**
+
+| | `useFormState`（v14） | `useActionState`（v15） |
+|--|----------------------|------------------------|
+| インポート元 | `react-dom` | `react` |
+| 戻り値 | `[state, formAction]` | `[state, formAction, isPending]` |
+| pending 状態 | 別途 `useFormStatus` が必要 | 3番目の戻り値で取得可能 |
+
+### Optimistic Updates（useOptimistic）
+
+```tsx
+'use client'
+import { useOptimistic } from 'react'
+import { send } from './actions'
+
+export function Thread({ messages }: { messages: Message[] }) {
+  const [optimisticMessages, addOptimisticMessage] = useOptimistic(
+    messages,
+    (state, newMessage: string) => [...state, { message: newMessage }]
+  )
+
+  return (
+    <div>
+      {optimisticMessages.map((m, k) => <div key={k}>{m.message}</div>)}
+      <form action={async (formData) => {
+        const message = formData.get('message')
+        addOptimisticMessage(message)
+        await send(message)
+      }}>
+        <input type="text" name="message" />
+        <button type="submit">Send</button>
+      </form>
+    </div>
+  )
+}
+```
+
+---
+
+## フォーム以外からの呼び出し
+
+### イベントハンドラ
+
+```tsx
+'use client'
+import { incrementLike } from './actions'
+import { useState } from 'react'
+
+export default function LikeButton({ initialLikes }: { initialLikes: number }) {
+  const [likes, setLikes] = useState(initialLikes)
+
+  return (
+    <button onClick={async () => {
+      const updatedLikes = await incrementLike()
+      setLikes(updatedLikes)
+    }}>
+      Like ({likes})
+    </button>
+  )
+}
+```
+
+---
+
+## データ再検証
+
+```ts
+'use server'
+import { revalidatePath } from 'next/cache'
+
+export async function createPost() {
+  // ...
+  revalidatePath('/posts')
+}
+```
+
+⚠️ 破壊的変更:
+Server Action からのリダイレクト時に、再検証が正しく適用されるようになった（v14ではタイミングの問題があった）。
+
+
+## Cookies 操作
+
+⚠️ 破壊的変更:
+`cookies()` が非同期に変更。`await` が必要。
+
+
+```ts
+'use server'
+import { cookies } from 'next/headers'
+
+export async function exampleAction() {
+  const cookieStore = await cookies()        // v15: await が必要
+  const value = cookieStore.get('name')?.value
+  cookieStore.set('name', 'Delba')
+  cookieStore.delete('name')
+}
+```
+
+---
+
+## セキュリティ
+
+### 認証・認可
+
+```ts
+'use server'
+import { auth } from './lib'
+
+export function addItem() {
+  const { user } = auth()
+  if (!user) {
+    throw new Error('You must be signed in to perform this action')
+  }
+  // ...
+}
+```
+
+### クロージャと暗号化
+
+- Next.js が閉じ込められた変数を**自動暗号化**
+- ビルドごとに新しい秘密鍵が生成
+
+### CSRF 対策
+
+```ts
+// next.config.ts
+const nextConfig = {
+  experimental: {
+    serverActions: {
+      allowedOrigins: ['my-proxy.com', '*.my-proxy.com'],
+    },
+  },
+}
+```
+
+
+============================================================
+Source: next15/05-caching.md
+URL: https://nextjs-docs.example.com/next15/05-caching
+============================================================
+
+# Next.js 15 App Router - キャッシング
+
+> ソース: https://nextjs.org/docs/app/building-your-application/caching
+
+⚠️ 破壊的変更:
+v15 ではキャッシュのデフォルト動作が大幅に変更された。v14 では「可能な限りキャッシュする」がデフォルトだったが、v15 では「デフォルトでキャッシュしない」に変更。
+
+
+## 4つのキャッシュメカニズム
+
+| メカニズム | 対象 | 場所 | 目的 | 期間 |
+|-----------|------|------|------|------|
+| Request Memoization | 関数の戻り値 | サーバー | Reactコンポーネントツリー内でデータ再利用 | リクエストライフサイクル |
+| Data Cache | データ | サーバー | ユーザーリクエスト・デプロイを跨いでデータ保存 | 永続的（再検証可能） |
+| Full Route Cache | HTML と RSC Payload | サーバー | レンダリングコスト削減 | 永続的（再検証可能） |
+| Router Cache | RSC Payload | クライアント | ナビゲーション時のサーバーリクエスト削減 | セッション or 時間ベース |
+
+---
+
+## v14 → v15 キャッシュデフォルト変更まとめ
+
+| キャッシュ | v14 デフォルト | v15 デフォルト | v14 の動作に戻す方法 |
+|-----------|-------------|-------------|-------------------|
+| **fetch** | `force-cache` | `no-store` | `fetch(url, { cache: 'force-cache' })` |
+| **GET Route Handler** | キャッシュされる | キャッシュされない | `export const dynamic = 'force-static'` |
+| **Client Router Cache（Page）** | `staleTime: 30s`（動的）/ `5min`（静的） | `staleTime: 0` | `staleTimes: { dynamic: 30 }` を設定 |
+
+---
+
+## 1. Request Memoization（React の機能）
+
+- React が `fetch` を自動メモ化（変更なし）
+- 同じURL・オプションの `fetch` はレンダリングパス内で1回だけ実行
+- **GET メソッドのみ**
+- React コンポーネントツリー内のみ（Route Handlers は対象外）
+
+```tsx
+async function getItem() {
+  const res = await fetch('https://.../item/1')
+  return res.json()
+}
+
+const item = await getItem() // cache MISS（実行される）
+const item = await getItem() // cache HIT（メモから返す）
+```
+
+---
+
+## 2. Data Cache
+
+⚠️ 破壊的変更:
+`fetch` のデフォルトが `no-store` に変更。キャッシュするには明示的な指定が必要。
+
+
+```tsx
+// v14: デフォルトでキャッシュされた
+fetch('https://...')
+
+// v15: デフォルトでキャッシュされない
+fetch('https://...')
+
+// v15: 明示的にキャッシュを有効化
+fetch('https://...', { cache: 'force-cache' })
+```
+
+### 再検証
+
+#### 時間ベース
+```js
+fetch('https://...', { next: { revalidate: 3600 } })
+```
+
+#### オンデマンド
+```js
+revalidatePath('/')
+revalidateTag('collection')
+```
+
+### オプトアウト
+
+```js
+// v15 ではデフォルトで no-store なので、明示的なオプトアウトは通常不要
+fetch('https://...', { cache: 'no-store' })
+
+// セグメント全体
+export const dynamic = 'force-dynamic'
+```
+
+---
+
+## 3. Full Route Cache
+
+- ビルド時に静的レンダリングされたルートのHTML + RSC Payloadをキャッシュ
+- CDNから配信可能
+
+### 無効化
+
+1. **Data Cache の再検証** → Full Route Cache も無効化
+2. **再デプロイ** → Full Route Cache はクリア
+
+### オプトアウト
+
+⚠️ 破壊的変更:
+`cookies()` と `headers()` が非同期に。Dynamic Functions として引き続き Full Route Cache をオプトアウトするが、呼び出し時に `await` が必要。
+
+
+- Dynamic Functions の使用（`await cookies()`, `await headers()`, `searchParams`）
+- `dynamic = 'force-dynamic'` または `revalidate = 0`
+- Data Cache のオプトアウト
+
+---
+
+## 4. Router Cache（クライアントサイド）
+
+⚠️ 破壊的変更:
+Page コンポーネントのデフォルト `staleTime` が `0` に変更。ナビゲーション時に常にサーバーから最新データを取得。
+
+
+### v14 vs v15 の Router Cache 動作
+
+| | v14 | v15 |
+|--|-----|-----|
+| 動的ルートの staleTime | 30秒 | **0**（即座に再取得） |
+| 静的ルートの staleTime | 5分 | **0**（即座に再取得） |
+| `loading.js` | 5分キャッシュ | **5分キャッシュ**（変更なし） |
+| 共有レイアウト | リフェッチしない | **リフェッチしない**（変更なし） |
+| 戻る/進む | キャッシュから復元 | **キャッシュから復元**（変更なし） |
+
+### v14 の動作に戻す
+
+```ts
+// next.config.ts
+const nextConfig = {
+  experimental: {
+    staleTimes: {
+      dynamic: 30,   // 動的ルートを30秒キャッシュ
+      static: 300,   // 静的ルートを5分キャッシュ
+    },
+  },
+}
+```
+
+### 無効化
+
+- Server Action で `revalidatePath` / `revalidateTag`
+- `cookies.set` / `cookies.delete`
+- `router.refresh`
+
+---
+
+## キャッシュの相互作用
+
+### Data Cache ↔ Full Route Cache
+- Data Cache の再検証/オプトアウト → Full Route Cache も無効化
+- Full Route Cache のオプトアウト → Data Cache には**影響しない**
+
+### Data Cache ↔ Router Cache
+- Route Handler での Data Cache 再検証 → Router Cache は**即座に無効化されない**
+- Server Action での再検証 → Router Cache も無効化
+
+---
+
+## API とキャッシュの関係
+
+| API | Router Cache | Full Route Cache | Data Cache | React Cache |
+|-----|-------------|-----------------|------------|-------------|
+| `<Link prefetch>` | キャッシュ | | | |
+| `router.prefetch` | キャッシュ | | | |
+| `router.refresh` | 再検証 | | | |
+| `fetch` | | | **要明示指定** | キャッシュ |
+| `fetch cache:'force-cache'` | | キャッシュ | キャッシュ | |
+| `fetch cache:'no-store'` | | | オプトアウト | |
+| `fetch next.revalidate` | | 再検証 | 再検証 | |
+| `revalidateTag` | 再検証(SA) | 再検証 | 再検証 | |
+| `revalidatePath` | 再検証(SA) | 再検証 | 再検証 | |
+| `cookies` | 再検証(SA) | オプトアウト | | |
+| `headers`, `searchParams` | | オプトアウト | | |
+
+> SA = Server Action 経由の場合
+
+
+============================================================
+Source: next15/06-route-handlers.md
+URL: https://nextjs-docs.example.com/next15/06-route-handlers
+============================================================
+
+# Next.js 15 App Router - Route Handlers
+
+> ソース: https://nextjs.org/docs/app/building-your-application/routing/route-handlers
+
+## 概要
+
+Web の Request/Response API を使ってカスタムリクエストハンドラを作成。
+`app` ディレクトリ内でのみ利用可能。
+
+## 規約
+
+`route.js|ts` ファイルで定義:
+
+```ts
+// app/api/route.ts
+export async function GET(request: Request) {}
+```
+
+**制約:** 同じルートセグメントに `route.js` と `page.js` を共存させることは**不可**。
+
+## サポートされるHTTPメソッド
+
+`GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`
+
+---
+
+## キャッシング
+
+⚠️ 破壊的変更:
+`GET` Route Handlers がデフォルトでキャッシュされなくなった。v14 では `Response` オブジェクト使用時にキャッシュされていた。
+
+
+### v14 vs v15
+
+| 条件 | v14 | v15 |
+|------|-----|-----|
+| `GET` + `Response` オブジェクト | キャッシュされる | **キャッシュされない** |
+| `GET` + `Request` オブジェクト | キャッシュされない | キャッシュされない |
+| POST, PUT 等 | キャッシュされない | キャッシュされない |
+
+### v14 の動作に戻す
+
+```ts
+// 明示的にキャッシュを有効化
+export const dynamic = 'force-static'
+
+export async function GET() {
+  const res = await fetch('https://data.mongodb-api.com/...')
+  const data = await res.json()
+  return Response.json({ data })
+}
+```
+
+### キャッシュのオプトアウト（v15 ではデフォルト）
+
+- Dynamic Functions（`cookies`, `headers`）を使用
+- 他のHTTPメソッド（POST等）を使用
+- Segment Config で dynamic モードを指定
+
+---
+
+## 再検証
+
+```ts
+export async function GET() {
+  const res = await fetch('https://data.mongodb-api.com/...', {
+    next: { revalidate: 60 },
+  })
+  const data = await res.json()
+  return Response.json(data)
+}
+```
+
+---
+
+## Cookies
+
+⚠️ 破壊的変更:
+`cookies()` が非同期に変更。`await` が必要。
+
+
+```ts
+import { cookies } from 'next/headers'
+
+export async function GET(request: Request) {
+  // v14: const cookieStore = cookies()
+  const cookieStore = await cookies()  // v15: await が必要
+  const token = cookieStore.get('token')
+
+  return new Response('Hello', {
+    status: 200,
+    headers: { 'Set-Cookie': `token=${token?.value}` },
+  })
+}
+```
+
+## Headers
+
+⚠️ 破壊的変更:
+`headers()` が非同期に変更。`await` が必要。
+
+
+```ts
+import { headers } from 'next/headers'
+
+export async function GET(request: Request) {
+  // v14: const headersList = headers()
+  const headersList = await headers()  // v15: await が必要
+  const referer = headersList.get('referer')
+
+  return new Response('Hello', {
+    status: 200,
+    headers: { referer: referer ?? '' },
+  })
+}
+```
+
+---
+
+## Dynamic Route Segments
+
+⚠️ 破壊的変更:
+`params` が非同期に変更。`await` が必要。
+
+
+```ts
+// app/items/[slug]/route.ts
+
+// v14
+export async function GET(
+  request: Request,
+  { params }: { params: { slug: string } }
+) {
+  const slug = params.slug
+}
+
+// v15
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ slug: string }> }
+) {
+  const { slug } = await params
+}
+```
+
+## URL Query Parameters
+
+```ts
+import { type NextRequest } from 'next/server'
+
+export function GET(request: NextRequest) {
+  const searchParams = request.nextUrl.searchParams
+  const query = searchParams.get('query')
+}
+```
+
+---
+
+## Request Body
+
+```ts
+export async function POST(request: Request) {
+  const res = await request.json()
+  return Response.json({ res })
+}
+```
+
+### FormData
+
+```ts
+export async function POST(request: Request) {
+  const formData = await request.formData()
+  const name = formData.get('name')
+  const email = formData.get('email')
+  return Response.json({ name, email })
+}
+```
+
+---
+
+## CORS
+
+```ts
+export async function GET(request: Request) {
+  return new Response('Hello', {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    },
+  })
+}
+```
+
+---
+
+## Streaming
+
+```ts
+export const runtime = 'edge'  // v14 の 'experimental-edge' は廃止
+
+export async function POST(req: Request) {
+  // ストリーミングレスポンスの実装
+}
+```
+
+⚠️ 破壊的変更:
+`export const runtime = "experimental-edge"` は廃止。`"edge"` を使用すること。自動変換コマンド: `npx @next/codemod@canary app-dir-runtime-config-experimental-edge .`
+
+
+---
+
+## Segment Config Options
+
+```ts
+export const dynamic = 'auto'
+export const dynamicParams = true
+export const revalidate = false
+export const fetchCache = 'auto'
+export const runtime = 'nodejs'
+export const preferredRegion = 'auto'
+```
+
+---
+
+## Non-UI Responses
+
+```ts
+export async function GET() {
+  return new Response(`<?xml version="1.0" encoding="UTF-8" ?>
+<rss version="2.0">
+  <channel>
+    <title>Next.js Documentation</title>
+  </channel>
+</rss>`, {
+    headers: { 'Content-Type': 'text/xml' },
+  })
+}
+```
+
+
+============================================================
+Source: next15/07-middleware.md
+URL: https://nextjs-docs.example.com/next15/07-middleware
+============================================================
+
+# Next.js 15 App Router - Middleware
+
+> ソース: https://nextjs.org/docs/app/building-your-application/routing/middleware
+
+## 概要
+
+リクエストが完了する前にコードを実行。
+リクエストに基づいてレスポンスを書き換え、リダイレクト、ヘッダー変更、直接レスポンス返却が可能。
+
+**キャッシュされたコンテンツやルートマッチングの前に実行される。**
+
+## 規約
+
+プロジェクトルートに `middleware.ts`（or `.js`）を配置。
+
+```ts
+// middleware.ts
+import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
+
+export function middleware(request: NextRequest) {
+  return NextResponse.redirect(new URL('/home', request.url))
+}
+
+export const config = {
+  matcher: '/about/:path*',
+}
+```
+
+---
+
+## react-server 条件
+
+⚠️ 破壊的変更:
+Middleware に `react-server` 条件が適用されるようになった。React のクライアント専用APIのインポートが制限される。
+
+
+Middleware 内で `useState`, `useEffect` などのクライアント React API をインポートするとエラーになる。Middleware はサーバーサイドで実行されるため、これらのAPIは本来使用すべきではない。
+
+---
+
+## パスマッチング
+
+### 実行順序
+
+1. `next.config.js` の `headers`
+2. `next.config.js` の `redirects`
+3. **Middleware**（rewrites, redirects 等）
+4. `next.config.js` の `beforeFiles` rewrites
+5. ファイルシステムルート
+6. `next.config.js` の `afterFiles` rewrites
+7. Dynamic Routes
+8. `next.config.js` の `fallback` rewrites
+
+### Matcher
+
+```js
+export const config = {
+  matcher: '/about/:path*',
+}
+
+// 複数パス
+export const config = {
+  matcher: ['/about/:path*', '/dashboard/:path*'],
+}
+```
+
+**静的ファイルを除外:**
+
+```js
+export const config = {
+  matcher: [
+    '/((?!api|_next/static|_next/image|favicon.ico).*)',
+  ],
+}
+```
+
+**プリフェッチを除外:**
+
+```js
+export const config = {
+  matcher: [
+    {
+      source: '/((?!api|_next/static|_next/image|favicon.ico).*)',
+      missing: [
+        { type: 'header', key: 'next-router-prefetch' },
+        { type: 'header', key: 'purpose', value: 'prefetch' },
+      ],
+    },
+  ],
+}
+```
+
+---
+
+## NextResponse API
+
+- `redirect`: 別URLにリダイレクト
+- `rewrite`: 指定URLのレスポンスを表示
+- リクエスト/レスポンスヘッダーの設定
+- レスポンスCookieの設定
+
+---
+
+## Cookies
+
+```ts
+export function middleware(request: NextRequest) {
+  let cookie = request.cookies.get('nextjs')
+  const allCookies = request.cookies.getAll()
+  request.cookies.has('nextjs')
+  request.cookies.delete('nextjs')
+
+  const response = NextResponse.next()
+  response.cookies.set('vercel', 'fast')
+  response.cookies.set({ name: 'vercel', value: 'fast', path: '/' })
+
+  return response
+}
+```
+
+---
+
+## ヘッダーの設定
+
+```ts
+export function middleware(request: NextRequest) {
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set('x-hello-from-middleware1', 'hello')
+
+  const response = NextResponse.next({
+    request: { headers: requestHeaders },
+  })
+
+  response.headers.set('x-hello-from-middleware2', 'hello')
+  return response
+}
+```
+
+---
+
+## 直接レスポンス
+
+```ts
+import { NextRequest } from 'next/server'
+import { isAuthenticated } from '@lib/auth'
+
+export const config = {
+  matcher: '/api/:function*',
+}
+
+export function middleware(request: NextRequest) {
+  if (!isAuthenticated(request)) {
+    return Response.json(
+      { success: false, message: 'authentication failed' },
+      { status: 401 }
+    )
+  }
+}
+```
+
+---
+
+## waitUntil
+
+```ts
+export function middleware(req: NextRequest, event: NextFetchEvent) {
+  event.waitUntil(
+    fetch('https://my-analytics-platform.com', {
+      method: 'POST',
+      body: JSON.stringify({ pathname: req.nextUrl.pathname }),
+    })
+  )
+  return NextResponse.next()
+}
+```
+
+---
+
+## NextRequest の変更
+
+⚠️ 破壊的変更:
+`NextRequest` の `geo` と `ip` プロパティが削除された。これらの値はホスティングプロバイダが提供する。
+
+
+Vercel を使用する場合は `@vercel/functions` を使用:
+
+```ts
+import { geolocation, ipAddress } from '@vercel/functions'
+import type { NextRequest } from 'next/server'
+
+export function middleware(request: NextRequest) {
+  const { city } = geolocation(request)
+  const ip = ipAddress(request)
+  // ...
+}
+```
+
+---
+
+## ランタイム
+
+Middleware は **Edge Runtime のみ**。Node.js Runtime は使用不可。
+
+
+============================================================
+Source: next15/08-error-handling.md
+URL: https://nextjs-docs.example.com/next15/08-error-handling
+============================================================
+
+# Next.js 15 App Router - エラーハンドリング
+
+> ソース: https://nextjs.org/docs/app/building-your-application/routing/error-handling
+
+## 概要
+
+`error.js` ファイル規約で、ネストされたルートのランタイムエラーをグレースフルに処理。
+
+- ルートセグメントとその子を React Error Boundary で自動ラップ
+- ファイルシステム階層で粒度を調整
+- エラーを影響を受けたセグメントに分離
+- フルページリロードなしでのエラーリカバリ機能
+
+---
+
+## 基本的な使い方
+
+```tsx
+// app/dashboard/error.tsx
+'use client'
+
+import { useEffect } from 'react'
+
+export default function Error({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string }
+  reset: () => void
+}) {
+  useEffect(() => {
+    console.error(error)
+  }, [error])
+
+  return (
+    <div>
+      <h2>Something went wrong!</h2>
+      <button onClick={() => reset()}>Try again</button>
+    </div>
+  )
+}
+```
+
+---
+
+## 仕組み
+
+```
+<Layout>
+  <ErrorBoundary fallback={<Error />}>
+    <Page />
+  </ErrorBoundary>
+</Layout>
+```
+
+- `error.js` は**同じセグメント**の `layout.js` のエラーをキャッチしない
+- 特定のレイアウトのエラーを処理するには**親セグメント**に `error.js` を配置
+
+---
+
+## Root Layout のエラーハンドリング: `global-error.js`
+
+```tsx
+// app/global-error.tsx
+'use client'
+
+export default function GlobalError({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string }
+  reset: () => void
+}) {
+  return (
+    <html>
+      <body>
+        <h2>Something went wrong!</h2>
+        <button onClick={() => reset()}>Try again</button>
+      </body>
+    </html>
+  )
+}
+```
+
+---
+
+## Hydration エラーの改善
+
+✅ 新機能:
+Hydration エラーの表示が大幅に改善。エラーのソースコードと修正方法の提案が表示されるようになった。
+
+
+v14.1 から始まった改善がさらに進化:
+- エラーの原因となったソースコードが直接表示される
+- 具体的な修正提案が提供される
+- クライアント/サーバーの不一致箇所がハイライトされる
+
+---
+
+## サーバーエラーの処理
+
+Server Component 内でエラーが発生した場合:
+- Next.js が `Error` オブジェクト（本番環境では機密情報を削除）を最も近い `error.js` に転送
+
+### 本番環境のセキュリティ
+
+- `message`: エラーの汎用メッセージ
+- `digest`: 自動生成されたエラーハッシュ（サーバーサイドログとの照合用）
+
+開発環境では元の `message` がクライアントに送信される。
+
+---
+
+## unstable_rethrow
+
+✅ 新機能:
+`unstable_rethrow` 関数で Next.js 内部エラーを App Router 内で再スローできるようになった。
+
+
+Next.js の内部エラー（`redirect()` や `notFound()` がスローするエラーなど）を `try/catch` で誤ってキャッチしてしまった場合に使用:
+
+```tsx
+import { unstable_rethrow } from 'next/navigation'
+
+export default async function Page() {
+  try {
+    // ...何らかの処理
+  } catch (error) {
+    unstable_rethrow(error)  // Next.js 内部エラーなら再スロー
+    // それ以外のエラーをハンドリング
+    console.error(error)
+  }
+}
+```
+
+
+============================================================
+Source: next15/09-loading-streaming.md
+URL: https://nextjs-docs.example.com/next15/09-loading-streaming
+============================================================
+
+# Next.js 15 App Router - Loading UI & Streaming
+
+> ソース: https://nextjs.org/docs/app/building-your-application/routing/loading-ui-and-streaming
+
+> v14 からの変更はほぼなし。
+
+## loading.js
+
+`loading.js` で React Suspense を使ったローディングUIを作成。
+
+```tsx
+// app/dashboard/loading.tsx
+export default function Loading() {
+  return <LoadingSkeleton />
+}
+```
+
+### 動作
+
+- `loading.js` は `layout.js` の中にネスト
+- `page.js` とその配下を `<Suspense>` 境界で自動ラップ
+
+```
+<Layout>
+  <Suspense fallback={<Loading />}>
+    <Page />
+  </Suspense>
+</Layout>
+```
+
+**特徴:**
+- ナビゲーションは即座
+- ナビゲーションは中断可能
+- 新しいルートセグメントのロード中も共有レイアウトはインタラクティブ
+
+⚡ 動作変更:
+Router Cache における `loading.js` のキャッシュ期間は引き続き **5分**（`staleTimes.static` の値）。Page のデフォルト staleTime が 0 に変更されたが、loading.js は影響を受けない。
+
+
+---
+
+## Streaming with Suspense
+
+`loading.js` に加え、独自の `<Suspense>` 境界を手動で作成可能。
+
+### SSR の課題と Streaming の解決
+
+**従来のSSR（順次・ブロッキング）:**
+1. サーバーでページの全データをフェッチ
+2. サーバーでHTMLをレンダリング
+3. HTML, CSS, JS をクライアントに送信
+4. 非インタラクティブUIを表示
+5. React がハイドレーション
+
+**Streaming:**
+- ページのHTMLをチャンクに分割して順次送信
+- 優先度の高いコンポーネントを先に送信可能
+
+### メリット
+
+- **TTFB** の改善
+- **FCP** の改善
+- **TTI** の改善（特に低速デバイス）
+
+### Suspense の使い方
+
+```tsx
+import { Suspense } from 'react'
+import { PostFeed, Weather } from './Components'
+
+export default function Posts() {
+  return (
+    <section>
+      <Suspense fallback={<p>Loading feed...</p>}>
+        <PostFeed />
+      </Suspense>
+      <Suspense fallback={<p>Loading weather...</p>}>
+        <Weather />
+      </Suspense>
+    </section>
+  )
+}
+```
+
+---
+
+## SEO
+
+- `generateMetadata` 内のデータフェッチが完了するまでUIストリーミングを待機
+- ストリーミングはサーバーレンダリングのためSEOに影響なし
+
+## ステータスコード
+
+- ストリーミング中は `200` が返される
+- `redirect` や `notFound` はストリーミングコンテンツ内でエラーを通知
+
+
+============================================================
+Source: next15/10-new-apis.md
+URL: https://nextjs-docs.example.com/next15/10-new-apis
+============================================================
+
+# Next.js 15 - 新機能・新API
+
+> ソース: https://nextjs.org/blog/next-15
+
+v15 で追加された主要な新機能とAPI。
+
+---
+
+## `<Form>` コンポーネント
+
+✅ 新機能:
+`next/form` から `<Form>` コンポーネントが利用可能。HTML `<form>` を拡張し、プリフェッチ・クライアントサイドナビゲーション・プログレッシブエンハンスメントを提供。
+
+
+検索フォームなど、別ページに遷移するフォームに最適:
+
+```tsx
+import Form from 'next/form'
+
+export default function Page() {
+  return (
+    <Form action="/search">
+      <input name="query" />
+      <button type="submit">Submit</button>
+    </Form>
+  )
+}
+```
+
+### 特徴
+
+| 機能 | 説明 |
+|------|------|
+| **プリフェッチ** | フォームがビューポートに表示されると、遷移先の layout と loading UI をプリフェッチ |
+| **クライアントサイドナビゲーション** | 送信時に共有レイアウトとクライアント状態を維持 |
+| **プログレッシブエンハンスメント** | JS が未ロードでもフルページナビゲーションで動作 |
+
+### v14 での同等の実装（手動）
+
+```tsx
+// v14 では手動実装が必要だった
+'use client'
+import { useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+
+export default function SearchForm(props) {
+  const router = useRouter()
+
+  useEffect(() => {
+    if (typeof props.action === 'string') {
+      router.prefetch(props.action)
+    }
+  }, [props.action, router])
+
+  function onSubmit(event) {
+    event.preventDefault()
+    const formData = new FormData(event.currentTarget)
+    const data = new URLSearchParams()
+    for (const [name, value] of formData) {
+      data.append(name, value as string)
+    }
+    router.push(`${props.action}?${data.toString()}`)
+  }
+
+  return <form onSubmit={onSubmit} {...props} />
+}
+```
+
+v15 の `<Form>` コンポーネントにより、このボイラープレートが不要に。
+
+---
+
+## `next.config.ts`（TypeScript サポート）
+
+✅ 新機能:
+設定ファイルを TypeScript で記述可能に。`NextConfig` 型による自動補完と型安全性。
+
+
+```ts
+// next.config.ts
+import type { NextConfig } from 'next'
+
+const nextConfig: NextConfig = {
+  /* config options here */
+}
+
+export default nextConfig
+```
+
+> `next.config.js` も引き続きサポート。
+
+---
+
+## `instrumentation.js`（安定版）
+
+✅ 新機能:
+サーバーライフサイクルの監視APIが安定版に。`experimental.instrumentationHook` の設定が不要に。
+
+
+```ts
+// instrumentation.ts
+
+export async function register() {
+  // OpenTelemetry などの監視ライブラリを初期化
+}
+
+export async function onRequestError(
+  err: Error,
+  request: { path: string; method: string; headers: Record<string, string> },
+  context: { routerKind: 'Pages Router' | 'App Router'; routeType: string }
+) {
+  // エラーを監視サービスに送信
+  await fetch('https://...', {
+    method: 'POST',
+    body: JSON.stringify({ message: err.message, request, context }),
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+```
+
+### `register()` 関数
+
+- サーバー起動時に1回だけ呼ばれる
+- 監視ライブラリの初期化に使用
+
+### `onRequestError()` フック
+
+サーバーエラーのキャッチに使用。以下のコンテキスト情報を含む:
+- **routerKind**: Pages Router or App Router
+- **routeType**: Server Component, Server Action, Route Handler, Middleware
+
+---
+
+## `unstable_after`（実験的）
+
+✅ 新機能:
+レスポンスのストリーミング完了後にコードを実行。ログ、アナリティクス、外部システム同期などに最適。
+
+
+### 設定
+
+```ts
+// next.config.ts
+const nextConfig = {
+  experimental: {
+    after: true,
+  },
+}
+```
+
+### 使い方
+
+Server Components, Server Actions, Route Handlers, Middleware で使用可能:
+
+```tsx
+import { unstable_after as after } from 'next/server'
+import { log } from '@/app/utils'
+
+export default function Layout({ children }) {
+  // レスポンス送信後にログを実行（ユーザーを待たせない）
+  after(() => {
+    log()
+  })
+
+  return <>{children}</>
+}
+```
+
+### ユースケース
+
+| ユースケース | 説明 |
+|------------|------|
+| ログ記録 | レスポンス完了後にアクセスログを記録 |
+| アナリティクス | ページビューやイベントを非同期送信 |
+| 外部同期 | 外部システムへのデータ同期 |
+| キャッシュ更新 | バックグラウンドでのキャッシュウォーミング |
+
+---
+
+## バンドル設定の統一
+
+✅ 新機能:
+App Router と Pages Router のバンドル設定を統一する新オプション。
+
+
+### `bundlePagesRouterDependencies`
+
+Pages Router でも App Router と同様に外部パッケージを自動バンドル:
+
+```ts
+// next.config.ts
+const nextConfig = {
+  bundlePagesRouterDependencies: true,
+}
+```
+
+### `serverExternalPackages`
+
+⚡ 動作変更:
+`serverComponentsExternalPackages` から `serverExternalPackages` に名前変更。
+
+
+特定のパッケージをバンドルから除外:
+
+```ts
+// next.config.ts
+const nextConfig = {
+  bundlePagesRouterDependencies: true,
+  serverExternalPackages: ['package-name'],
+}
+```
+
+---
+
+## ESLint 9 サポート
+
+✅ 新機能:
+ESLint 9 + 新しいフラットコンフィグ形式をサポート。ESLint 8 との後方互換性あり。
+
+
+- ESLint 9 未採用の場合、自動的に `ESLINT_USE_FLAT_CONFIG=false` を適用
+- `eslint-plugin-react-hooks` が v5.0.0 にアップグレード（新しいルール追加）
+
+---
+
+## セルフホスティング改善
+
+✅ 新機能:
+`Cache-Control` ヘッダーのカスタマイズが改善。
+
+
+### `expireTime` 設定
+
+ISR ページの `stale-while-revalidate` 期間を制御:
+
+```ts
+// next.config.ts
+const nextConfig = {
+  expireTime: 31536000, // デフォルト: 1年（秒）
+}
+```
+
+> v14 の `experimental.swrDelta` から名前変更。
+
+### sharp の自動使用
+
+`next start` またはスタンドアロン出力モードで `sharp` が自動的に使用される。手動インストール不要。
+
+---
+
+## next/image の変更
+
+⚠️ 破壊的変更:
+`next/image` に複数の破壊的変更あり。
+
+
+| 変更 | 詳細 |
+|------|------|
+| `squoosh` 削除 | 画像最適化に `sharp` を使用（自動） |
+| `Content-Disposition` | デフォルトが `attachment` に変更（画像がダウンロードされる） |
+| `src` バリデーション | 先頭・末尾のスペースがあるとエラー |
+
+---
+
+## next/font の変更
+
+⚠️ 破壊的変更:
+
+
+| 変更 | 詳細 |
+|------|------|
+| 外部パッケージ削除 | `@next/font` パッケージのサポート終了。`next/font` を使用 |
+| ハッシュ削除 | `font-family` のハッシュ化が廃止 |
+
+---
+
+## next/dynamic の変更
+
+⚠️ 破壊的変更:
+
+
+| 変更 | 詳細 |
+|------|------|
+| `suspense` prop 削除 | App Router では空の Suspense 境界を挿入しなくなった |
+| `ssr: false` 制限 | Server Components での `ssr: false` が禁止に |
+
+---
+
+## Speed Insights の削除
+
+⚠️ 破壊的変更:
+Speed Insights の自動計測が削除された。
+
+
+引き続き使用するには `@vercel/speed-insights` パッケージを手動でインストール:
+
+```bash
+npm install @vercel/speed-insights
+```
+
+```tsx
+// app/layout.tsx
+import { SpeedInsights } from '@vercel/speed-insights/next'
+
+export default function RootLayout({ children }) {
+  return (
+    <html>
+      <body>
+        {children}
+        <SpeedInsights />
+      </body>
+    </html>
+  )
+}
+```
+

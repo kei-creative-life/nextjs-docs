@@ -1,0 +1,28 @@
+# Next.js Docs (Japanese)
+
+> Next.js 14/15 App Router ドキュメント（日本語）をトピック別に整理したサイト。
+> 破壊的変更・新機能がひと目でわかるマーカー付き。
+
+## Pages
+
+- [index](https://nextjs-docs.example.com)
+- [Next.js 14 App Router - ルーティング](https://nextjs-docs.example.com/next14/01-routing): - **Tree**: 階層構造を可視化する規約（コンポーネントツリー、フォルダ構造等）
+- [Next.js 14 App Router - レンダリング（Server/Client Components）](https://nextjs-docs.example.com/next14/02-rendering): - **データフェッチ**: サーバー側でデータソースに近い場所でフェッチ → 高速化
+- [Next.js 14 App Router - データフェッチング](https://nextjs-docs.example.com/next14/03-data-fetching): 2. サーバーでサードパーティライブラリを使用
+- [Next.js 14 App Router - Server Actions & Mutations](https://nextjs-docs.example.com/next14/04-server-actions): Server Actions = サーバーで実行される**非同期関数**。
+- [Next.js 14 App Router - キャッシング](https://nextjs-docs.example.com/next14/05-caching): - React が `fetch` を自動メモ化
+- [Next.js 14 App Router - Route Handlers](https://nextjs-docs.example.com/next14/06-route-handlers): Web の Request/Response API を使ってカスタムリクエストハンドラを作成。
+- [Next.js 14 App Router - Middleware](https://nextjs-docs.example.com/next14/07-middleware): リクエストに基づいてレスポンスを書き換え、リダイレクト、ヘッダー変更、直接レスポンス返却が可能。
+- [Next.js 14 App Router - エラーハンドリング](https://nextjs-docs.example.com/next14/08-error-handling): `error.js` ファイル規約で、ネストされたルートのランタイムエラーをグレースフルに処理。
+- [Next.js 14 App Router - Loading UI & Streaming](https://nextjs-docs.example.com/next14/09-loading-streaming): `loading.js` で React Suspense を使ったローディングUIを作成。
+- [Next.js 15 - 変更概要](https://nextjs-docs.example.com/next15/00-overview): Next.js 15 は React 19 対応、キャッシュデフォルトの変更、非同期API化など、大きな変更を含むメジャーアップデート。
+- [Next.js 15 App Router - ルーティング](https://nextjs-docs.example.com/next15/01-routing): - **Tree**: 階層構造を可視化する規約（コンポーネントツリー、フォルダ構造等）
+- [Next.js 15 App Router - レンダリング（Server/Client Components）](https://nextjs-docs.example.com/next15/02-rendering): - **データフェッチ**: サーバー側でデータソースに近い場所でフェッチ
+- [Next.js 15 App Router - データフェッチング](https://nextjs-docs.example.com/next15/03-data-fetching): 2. サーバーでサードパーティライブラリを使用
+- [Next.js 15 App Router - Server Actions & Mutations](https://nextjs-docs.example.com/next15/04-server-actions): Server Actions = サーバーで実行される**非同期関数**。
+- [Next.js 15 App Router - キャッシング](https://nextjs-docs.example.com/next15/05-caching): v15 ではキャッシュのデフォルト動作が大幅に変更された。v14 では「可能な限りキャッシュする」がデフォルトだったが、v15 では「デフォルトでキャッシュしない」に変更。
+- [Next.js 15 App Router - Route Handlers](https://nextjs-docs.example.com/next15/06-route-handlers): Web の Request/Response API を使ってカスタムリクエストハンドラを作成。
+- [Next.js 15 App Router - Middleware](https://nextjs-docs.example.com/next15/07-middleware): リクエストに基づいてレスポンスを書き換え、リダイレクト、ヘッダー変更、直接レスポンス返却が可能。
+- [Next.js 15 App Router - エラーハンドリング](https://nextjs-docs.example.com/next15/08-error-handling): `error.js` ファイル規約で、ネストされたルートのランタイムエラーをグレースフルに処理。
+- [Next.js 15 App Router - Loading UI & Streaming](https://nextjs-docs.example.com/next15/09-loading-streaming): `loading.js` で React Suspense を使ったローディングUIを作成。
+- [Next.js 15 - 新機能・新API](https://nextjs-docs.example.com/next15/10-new-apis): v15 で追加された主要な新機能とAPI。
