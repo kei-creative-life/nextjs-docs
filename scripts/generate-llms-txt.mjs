@@ -3,7 +3,7 @@ import { join, relative, basename } from 'path'
 
 const ROOT = new URL('..', import.meta.url).pathname
 const PUBLIC_DIR = join(ROOT, 'public')
-const SITE_URL = process.env.SITE_URL || 'https://nextjs-docs.example.com'
+const SITE_URL = process.env.SITE_URL || 'https://nextjs-docs.pages.dev'
 
 // VitePress config からサイドバー情報を取得する代わりに、
 // ファイルシステムから直接 md ファイルを収集
